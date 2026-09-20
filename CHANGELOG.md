@@ -6,7 +6,31 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Fork integration — every open upstream PR merged
+
+This tree is the `phamtruonghung/webobsidian` fork with all 17 open pull requests from
+`xnohat/webobsidian` merged on top of `v0.1.1` (see
+[docs/UPSTREAM_PR_MERGES.md](docs/UPSTREAM_PR_MERGES.md) for the table, the conflict decisions and
+the bug fixes made while merging):
+
+- **Security**: the well-known default password `123456` is refused as soon as any credential
+  (`userPasswordHash`, `auth.passwordHash`, `WEBOBSIDIAN_PASSWORD`) is configured, and
+  `GET /auth/status` no longer leaks `mustChangePassword` to unauthenticated callers (PRs #4 + #15);
+  `PUT /api/settings` authorizes `vault.path` against operator-configured roots, not the request body
+  (PR #2, with the test suite from #6/#7); shared canvases drop unsafe URL schemes (PR #3).
+- **Vault**: symlinks inside the vault are listed/read/written when their target is an allowed root,
+  with a realpath cycle guard (PR #23).
+- **Editor & UI**: reusable preview tabs (PR #29); graph mobile touch, node dragging and ghost-node
+  fix (PR #25); Catppuccin themes (PR #11); dark-mode text contrast (PR #10); Account settings tab
+  and code comments in English (PRs #8/#9); percent-encoded image targets and table-cell italics
+  (PRs #13/#14).
+- **Tooling**: `webo` CLI process manager + graceful SIGTERM/SIGINT shutdown (PR #27); server test
+  suite (vitest) and web store tests (`node --test`); dependency refresh to 0 production advisories
+  (PR #24).
+
 ### Added
+- **`webo` Process Manager CLI** (`packages/webo`): command-line utility to manage WebObsidian as a background daemon process (`webo install`, `webo start`, `webo stop`, `webo status`, `webo logs`, `webo restart`, `webo config`, `webo uninstall`). Configured centrally via `~/.webobsidian/.env`. *(PRD 1.6 - FR-14)*
+- Server graceful shutdown handlers for SIGTERM/SIGINT signals (cleans up HTTP server, WebSockets, file watcher, and autosync timers).
 - Open-source repository scaffolding: `README.md` (with logo), `LICENSE` (MIT),
   `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, GitHub issue/PR templates and a
   CI workflow (typecheck, build, Docker image).

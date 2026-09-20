@@ -878,8 +878,12 @@ function scanTables(doc: Text): TableBlock[] {
 
 // Lightweight inline renderer for table cells (code / bold / italic / links).
 // `<br>` is the only inline HTML Obsidian commonly renders inside table cells.
+//
+// The `_…_` branch carries CommonMark's delimiter rules — `_` may not open or
+// close inside a word — or a cell holding `DB_NAME_v2` renders `_NAME_` as italic
+// and swallows the underscores. `*` is legal intraword, so it keeps the loose form.
 const CELL_INLINE_RE =
-  /(<br\s*\/?>)|(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*|_[^_]+_)|(!?\[\[[^\]]+?\]\])|(\[[^\]]+?\]\([^)]+\))/gi;
+  /(<br\s*\/?>)|(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*|(?<![\w\\])_(?!\s)[^_\n]+?(?<!\s)_(?!\w))|(!?\[\[[^\]]+?\]\])|(\[[^\]]+?\]\([^)]+\))/gi;
 
 function appendInline(parent: HTMLElement, text: string) {
   CELL_INLINE_RE.lastIndex = 0;
@@ -1899,6 +1903,20 @@ function attachmentUrl(target: string): string {
   return `/api/files/content?path=${encodeURIComponent(target)}`;
 }
 
+/**
+ * Markdown link targets are percent-encoded (`![](My%20File.png)`) and
+ * attachmentUrl() encodes again, so decode once or `%20` becomes `%2520`.
+ * try/catch: a lone `%` makes decodeURIComponent throw; the raw name is right then.
+ * Only for `![](…)` — `![[wikilink]]` targets are literal, not encoded.
+ */
+function decodeLinkTarget(target: string): string {
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
 function buildDecorations(view: EditorView): DecorationSet {
   const all: Range<Decoration>[] = [];
   const sel = view.state.selection;
@@ -2086,7 +2104,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         continue;
       }
 
-      // Inline-HTML paragraph line (e.g. `<u>…</u> và <mark>…`): Lezer only marks
+      // Inline-HTML paragraph line (e.g. `<u>…</u> and <mark>…`): Lezer only marks
       // block-level openers as HTMLBlock, so render whole-line inline HTML here.
       if (/^<[a-zA-Z][^>]*>/.test(text) && !lineActive(line.from)) {
         pushReplace(line.from, line.to, Decoration.replace({ widget: new HtmlBlockWidget(text) }));
@@ -2413,7 +2431,7 @@ function buildDecorations(view: EditorView): DecorationSet {
         // Browser-loadable URLs load directly; anything else (a relative path or
         // any custom scheme) is resolved by basename via the vault file index.
         const webLoadable = /^(https?|data|blob|file):/i.test(url);
-        const src = webLoadable ? url : attachmentUrl(url.split('/').pop() || url);
+        const src = webLoadable ? url : attachmentUrl(decodeLinkTarget(url.split('/').pop() || url));
         pushReplace(s, e, Decoration.replace({ widget: new ImageWidget(src, alt, w, h) }));
       }
 

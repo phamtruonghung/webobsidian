@@ -19,6 +19,11 @@ GitHub sync (incl. Git LFS), an API for AI agents, and community-plugin support.
 
 > 📐 Design: [PRD.md](PRD.md) · 📋 Progress: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
+> 🔀 **Fork**: `phamtruonghung/webobsidian` — upstream `xnohat/webobsidian` plus **all 17 open
+> upstream PRs merged into `main`** (security fixes, symlink vaults, preview tabs, Catppuccin
+> themes, `webo` CLI, test suites). See [docs/UPSTREAM_PR_MERGES.md](docs/UPSTREAM_PR_MERGES.md);
+> sync a later PR with `scripts/merge-upstream-pr.sh <n>`.
+
 </div>
 
 ---
@@ -100,10 +105,28 @@ The desktop app bundles the whole server, picks your vault folder on first launc
 Open on macOS). Build it yourself with `npm run desktop:dist`; see
 [`desktop/README.md`](desktop/README.md) for details.
 
-> 🔑 **Default password is `123456`.** Log in right away, then change it in
-> **Settings → Account**. To seed a different password on first run, set
-> `WEBOBSIDIAN_PASSWORD` in `.env`. Forgot it? Set `WEBOBSIDIAN_PASSWORD` (plaintext) or
-> `auth.passwordHash` (scrypt) as a recovery override.
+## 🛠️ Process Manager CLI (`webo`)
+
+Want to manage WebObsidian without Docker as a lightweight background daemon? Install the `webo` command line tool:
+
+```bash
+npm run build
+npm run webo install    # symlinks 'webo' executable to PATH and scaffolds ~/.webobsidian/.env
+```
+
+Now you can control the WebObsidian background service directly from anywhere:
+
+```bash
+webo start             # Start WebObsidian as a background daemon
+webo status            # Check process PID, port, and health check (/healthz)
+webo logs -f           # Tail server logs (~/.webobsidian/webo.log)
+webo restart           # Restart the daemon
+webo stop              # Gracefully stop the server daemon
+webo config            # Inspect active environment config (~/.webobsidian/.env)
+webo uninstall         # Remove 'webo' symlink from PATH
+```
+
+---
 
 ### Point it at your own vault
 

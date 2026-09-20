@@ -4,7 +4,16 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-06-27 (security fix — chặn leo thang quyền token share; merge fix F-03 rate-limit, giữ `trust proxy` mặc định bật)
+Cập nhật lần cuối: 2026-09-13 (FR-2 — preview tabs for note browsing)
+
+---
+
+## Phase 14 — CLI Process Manager (`webo`) — FR-14
+- [x] M14.1 Workspace `packages/webo` khởi tạo với TypeScript + CLI entry (`bin.ts`)
+- [x] M14.2 Server graceful shutdown: thêm handler SIGTERM/SIGINT trong `server/src/index.ts` giải phóng HTTP, WebSocket, file watcher, và autosync
+- [x] M14.3 Implementing `webo` subcommands: `install`, `start`, `stop`, `restart`, `status`, `logs`, `config`, `uninstall`
+- [x] M14.4 Setup PID file (`~/.webobsidian/webo.pid`), log file (`webo.log`), và scaffold configuration (`~/.webobsidian/.env`)
+- [x] M14.5 Root package scripts (`npm run webo`) & documentation trong README.md / PRD.md / CHANGELOG.md
 
 ---
 
@@ -30,6 +39,9 @@ Cập nhật lần cuối: 2026-06-27 (security fix — chặn leo thang quyền
 ## Phase 3 — Vault filesystem — FR-1
 - [x] M3.1 Service vault: list tree, read, write, create, rename/move, delete→trash
 - [x] M3.2 Path traversal guard + allowedRoots
+- [x] M3.7 Symlink vault roots: walks của `listTree`/`copy`/`listMarkdownFiles`/`buildFileIndex` theo symlink
+      (folder/file, kể cả trỏ ra ngoài vault root nếu realpath trong allowedRoots; link hỏng bỏ qua), cycle
+      guard bằng `realpath`; `assertRealpathInVault` kiểm tra đa allowedRoots; `fs.cp` bật `dereference: true`
 - [x] M3.3 Upload attachments (binary), serve binary với mime
 - [x] M3.4 Folder browser an toàn để chọn vault path
 - [x] M3.5 Filesystem watcher (chokidar) → events qua WebSocket
@@ -82,6 +94,8 @@ Cập nhật lần cuối: 2026-06-27 (security fix — chặn leo thang quyền
 - [x] M9.9 Theme Obsidian-like (dark/light)
 - [x] M9.10 Navigation back/forward (toolbar ←/→ trên mọi view, history stack)
 - [x] M9.11 Search: filter/sort (match case, collapse, more context, sort) + sticky query box
+- [x] M9.12 Preview tabs: reuse one italicized tab while browsing; double-click or edit to keep open;
+      preserve permanent tabs and workspace state, and verify navigation and rapid note selection.
 
 ## Phase 10 — Docker & docs — FR-9
 - [x] M10.1 Multi-stage `Dockerfile` (web build → server runtime, git+git-lfs)
@@ -430,6 +444,44 @@ Cập nhật lần cuối: 2026-06-27 (security fix — chặn leo thang quyền
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-09-13: Completed M9.12 (PRD 1.6, FR-2) — reusable preview tabs for browsing notes,
+  double-click to keep open, automatic promotion on edit/create, and persisted preview state.
+  Latest note selection wins when reads finish out of order. Verified 11 store regression tests,
+  `npm run typecheck`, `npm run build`, and browser checks of reuse, double-click, edits, and reload.
+- 2026-08-20 (FR-1 — symlink vault roots): vault dùng `readdir` với Dirent (semantics lstat) nên symlink
+  không bao giờ được liệt kê (không `isDirectory`/`isFile`), và `assertRealpathInVault` chặn mọi đường
+  thoát khỏi vault root đơn — vault có folder symlink trỏ ra ngoài root vô hình. **Sửa:** walks của
+  `listTree`/`copy`/`listMarkdownFiles`/`buildFileIndex` xử lý `e.isSymbolicLink()` (theo `fs.stat` →
+  folder/file, link hỏng bỏ qua) với cycle guard bằng `realpath` (Set) chống vòng lặp (vd symlink trỏ ngược
+  về root thành folder rỗng thay vì đệ quy vô hạn); `assertRealpathInVault` kiểm tra realpath theo **tất
+  cả** allowedRoots thay vì root đơn; `fs.cp` bật `dereference: true`. Đã xác minh: vault có 3 symlink
+  trỏ ra ngoài → 434 file `.md` được liệt kê/đọc/search OK, typecheck + build sạch.
+- 2026-07-27 (security fix: default password `123456` still accepted after an override was configured):
+  `checkPassword()` (server/src/services/auth.ts) only skipped the default-password branch when
+  `auth.userPasswordHash` was set. Configuring `WEBOBSIDIAN_PASSWORD` or a hand-edited `auth.passwordHash`
+  does **not** populate that field (`bootstrap.ts` deliberately only logs), so an operator who followed the
+  documented Docker path (`.env.example` calls it the "Initial master password", `docker-compose.yml` says
+  "Set an initial password"), set a strong secret and never opened the UI **still had `123456` accepted as a
+  full owner session**: the whole vault, `/api/settings`, `/api/keys`, `/api/git` including the stored PAT,
+  and the WebSocket stream. `GET /auth/status` made this trivially discoverable: it requires no auth and
+  returned `mustChangePassword`, which is exactly `userPasswordHash === ''`, so a port scan identified every
+  instance that would accept the default.
+  **Fix, in 4 places:** (1) new `server/src/services/password-policy.ts` exporting
+  `isDefaultPasswordActive(auth)`, true only when none of `userPasswordHash` / `passwordHash` /
+  `config.initialPassword` is set (a separate module so `auth.ts` and `settings.ts` can share one condition
+  without an import cycle). (2) `checkPassword()` gates the default branch on it. (3) `hasCustomPassword()`
+  and `redactSettings()` derive from the **same** predicate, so the "must change" signal can never disagree
+  with "is the default accepted"; that drift was the actual bug, and disagreement would strand the user,
+  since ForceChangePassword submits `changePassword('123456', ...)`. (4) `GET /auth/status` now returns only
+  `{ passwordSet }`; the client only ever read that field (`Login.tsx`), and `mustChangePassword` remains
+  available post-login on `/auth/login` and `/auth/me`.
+  *Deliberate side effect:* the desktop shell injects its per-install secret as `WEBOBSIDIAN_PASSWORD`, so
+  `123456` is now never valid on the loopback server even if `autoLogin()` fails, which previously left it live.
+  Verified against a running server, 3 scenarios / 8 assertions: with an env password set `123456` is
+  rejected (401) and the configured password accepted (200); with only a hand-edited recovery hash `123456`
+  is rejected and the recovery password accepted; with nothing configured `123456` still works (200) and
+  login reports `mustChangePassword: true`, preserving the documented first-run flow. `/auth/status` returns
+  `{"passwordSet":true}` with no `mustChangePassword` key. Typecheck + build clean.
 - 2026-06-27 (security fix — leo thang quyền qua token share): `verifyToken()` (server/src/services/auth.ts)
   chỉ kiểm tra chữ ký nên **mọi** token ký bằng `auth.jwtSecret` đều được chấp nhận như phiên owner. Endpoint
   public `POST /public/shares/:id/unlock` ký unlock-cookie bằng cùng secret → người được chia sẻ (có mật khẩu

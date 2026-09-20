@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { config, SETTINGS_FILE } from '../config.js';
+import { isDefaultPasswordActive } from './password-policy.js';
 
 /** ---- Schema (PRD §6) ---------------------------------------------------- */
 
@@ -20,9 +21,9 @@ const SettingsSchema = z.object({
   version: z.number().default(1),
   auth: z
     .object({
-      // Mật khẩu người dùng đã đổi. Rỗng = đang dùng mật khẩu mặc định (123456).
+      // The user's chosen password. Empty = still on the default password (123456).
       userPasswordHash: z.string().default(''),
-      // Mật khẩu override để khôi phục khi quên pass (sửa tay vào file). Rỗng = không có.
+      // Recovery/override password for a forgotten password (set by hand in the file). Empty = none.
       passwordHash: z.string().default(''),
       jwtSecret: z.string().default(''),
     })
@@ -32,8 +33,8 @@ const SettingsSchema = z.object({
       path: z.string().default(''),
       allowedRoots: z.array(z.string()).default([]),
       trash: z.string().default('.trash'),
-      // Xoá file: 'trash' = chuyển vào thư mục .trash (khôi phục được);
-      // 'permanent' = xoá vĩnh viễn ngay.
+      // Delete behavior: 'trash' = move into the .trash folder (recoverable);
+      // 'permanent' = delete immediately and permanently.
       deleteMode: z.enum(['trash', 'permanent']).default('trash'),
       attachmentDir: z.string().default('attachments'),
     })
@@ -69,7 +70,16 @@ const SettingsSchema = z.object({
     .default({}),
   ui: z
     .object({
-      theme: z.enum(['obsidian-dark', 'obsidian-light']).default('obsidian-light'),
+      theme: z
+        .enum([
+          'obsidian-dark',
+          'obsidian-light',
+          'catppuccin-mocha',
+          'catppuccin-macchiato',
+          'catppuccin-frappe',
+          'catppuccin-latte',
+        ])
+        .default('obsidian-light'),
       defaultView: z.enum(['live', 'source', 'reading']).default('live'),
     })
     .default({}),
@@ -147,10 +157,10 @@ export async function loadSettings(): Promise<Settings> {
       parsed.auth.jwtSecret = randomBytes(48).toString('hex');
       dirty = true;
     }
-    // Migration: trước đây `passwordHash` là mật khẩu đăng nhập. Mô hình mới coi
-    // `passwordHash` là mật khẩu override và `userPasswordHash` là pass đăng nhập
-    // (rỗng = mặc định 123456). Để file cũ không bị backdoor bằng 123456, chuyển
-    // pass cũ sang `userPasswordHash` rồi xoá field override.
+    // Migration: `passwordHash` used to be the login password. The new model treats
+    // `passwordHash` as the override and `userPasswordHash` as the login password
+    // (empty = default 123456). So an old file can't be backdoored via 123456, move
+    // the old password into `userPasswordHash` and clear the override field.
     if (parsed.auth.passwordHash && !parsed.auth.userPasswordHash) {
       parsed.auth.userPasswordHash = parsed.auth.passwordHash;
       parsed.auth.passwordHash = '';
@@ -189,8 +199,11 @@ export function redactSettings(s: Settings) {
   return {
     ...s,
     auth: {
-      // hasCustomPassword=false nghĩa là đang dùng mật khẩu mặc định (123456).
-      hasCustomPassword: Boolean(s.auth.userPasswordHash),
+      // hasCustomPassword=false means the instance is still on the default
+      // password (123456). Shares one condition with checkPassword: once an
+      // override is configured (auth.passwordHash / WEBOBSIDIAN_PASSWORD) the
+      // default no longer works, so the UI must stop warning that it does.
+      hasCustomPassword: !isDefaultPasswordActive(s.auth),
       hasOverridePassword: Boolean(s.auth.passwordHash),
     },
     git: { ...s.git, token: s.git.token ? '••••••••' : '' },
