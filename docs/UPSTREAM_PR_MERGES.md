@@ -95,6 +95,21 @@ and read through the API, and each boot logs the full 5-line teardown on `SIGTER
 
 ## Syncing a future upstream PR
 
-`scripts/merge-upstream-pr.sh <n>` fetches `refs/pull/<n>/head` from upstream and merges it with the
-standard provenance message. Use it the same way for later PRs — and if you re-merge something that
-is already in `main`, git simply reports "Already up to date".
+```bash
+scripts/upstream-pr-status.sh              # every open upstream PR: merged here or new?
+scripts/upstream-pr-status.sh --new-only   # just the new ones (exit 1 when any exist)
+scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head from upstream and merge it
+```
+
+`merge-upstream-pr.sh` fetches `refs/pull/<n>/head` from upstream and merges it with the standard
+provenance message. Use it the same way for later PRs — and if you re-merge something that is already
+in `main`, git simply reports "Already up to date".
+
+"Already merged" is decided by **ancestry** (`git merge-base --is-ancestor refs/remotes/upstream/pr/<n>
+main`), so it stays correct whether the PR was merged here, merged upstream, or arrived through a
+stacked branch.
+
+The check runs by itself too: `.github/workflows/upstream-sync.yml` scans every Monday (plus manual
+dispatch) and, **only when a genuinely new PR exists**, opens or updates one issue labelled
+`upstream-sync` listing it with the sync command. Silence means everything open upstream is already in
+this fork.
