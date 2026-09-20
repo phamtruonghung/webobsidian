@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Runtime smoke test for the features this fork merged from upstream PRs that unit
-# tests cannot cover end-to-end: the auth hardening (#4 + #15), the SIGTERM
-# graceful shutdown (#27) and vault symlinks through the HTTP API (#23).
+# Runtime smoke test for everything unit tests cannot cover end-to-end: the auth
+# hardening (#4 + #15), the SIGTERM graceful shutdown (#27), vault symlinks through
+# the HTTP API (#23) and the Agent API's read-modify-write surface + MCP server
+# (adopted from other forks).
 #
 #   npm run build && scripts/smoke-test.sh
 #
-# Boots the built server three times (fresh install / operator override / symlinked
-# vault) on a free-ish local port against throwaway data + vault dirs, drives it
-# with curl, then asserts the responses and the shutdown log.
+# Boots the built server five times (fresh install / operator override / symlinked
+# vault / agent API / strict agent API) on a free-ish local port against throwaway
+# data + vault dirs, drives it with curl (and one real MCP stdio handshake), then
+# asserts the responses and the shutdown log.
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -96,6 +98,98 @@ code_c="$(curl -s -o /tmp/wo-c.json -w '%{http_code}' -b /tmp/wo-cookies.txt \
 chk "GET /api/files/content reads through the symlink" "200 # from the linked folder" \
     "$code_c $(python3 -c "import json;print(json.load(open('/tmp/wo-c.json'))['content'])")"
 kill -TERM $SRV 2>/dev/null; wait $SRV 2>/dev/null
+
+echo "== scenario D: Agent API read-modify-write (adopted from blueberry6401) =="
+NOTE_JSON='"content":"# smoke\nline two\nmarker here\nmarker here\n","base_version":""'
+NOTE="Testing/smoke.md"
+if start_server env; then
+  curl -s -c /tmp/wo-d-cookies.txt -o /dev/null -X POST "$BASE/auth/login" \
+    -H 'Content-Type: application/json' -d '{"password":"123456"}'
+  KEY="$(curl -s -b /tmp/wo-d-cookies.txt -X POST "$BASE/api/keys" -H 'Content-Type: application/json' \
+    -d '{"name":"smoke","scopes":["read","write","search"]}' \
+    | python3 -c 'import json,sys;print(json.load(sys.stdin).get("key",""))')"
+  chk "POST /api/keys issues an agent key" "wok_" "${KEY:0:4}"
+
+  api() { curl -s -m 10 -H "X-API-Key: $KEY" -H 'Content-Type: application/json' "$@"; }
+  jget() { python3 -c "import json,sys;d=json.load(sys.stdin);print($1)"; }
+
+  chk "PUT with base_version \"\" creates the note and returns its version" "200 True 16" \
+      "$(curl -s -o /tmp/wo-d-put.json -w '%{http_code}' -X PUT "$BASE/api/v1/notes/$NOTE" \
+         -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d "{$NOTE_JSON}") \
+         $(jget 'd.get("ok")' < /tmp/wo-d-put.json) \
+         $(jget 'len(d.get("version",""))' < /tmp/wo-d-put.json)"
+  V1="$(jget 'd["version"]' < /tmp/wo-d-put.json)"
+
+  api "$BASE/api/v1/notes/$NOTE" > /tmp/wo-d-get.json
+  chk "GET returns the same version + line count" "$V1 5" \
+      "$(jget 'd["version"]' < /tmp/wo-d-get.json) $(jget 'd["totalLines"]' < /tmp/wo-d-get.json)"
+
+  api "$BASE/api/v1/notes/$NOTE?offset=1&limit=2" > /tmp/wo-d-seg.json
+  chk "GET ?offset=1&limit=2 returns just those lines" "line two/marker here True" \
+      "$(jget 'd["content"].replace(chr(10),"/")' < /tmp/wo-d-seg.json) $(jget 'd["hasMore"]' < /tmp/wo-d-seg.json)"
+
+  api "$BASE/api/v1/note-matches?path=Testing%2Fsmoke.md&q=marker" > /tmp/wo-d-grep.json
+  chk "GET /note-matches counts occurrences + reports line numbers" "2 3,4" \
+      "$(jget 'd["count"]' < /tmp/wo-d-grep.json) $(jget '",".join(str(m["line"]) for m in d["matches"])' < /tmp/wo-d-grep.json)"
+
+  code="$(curl -s -o /tmp/wo-d-amb.json -w '%{http_code}' -X PATCH "$BASE/api/v1/notes/$NOTE" \
+    -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d '{"find":"marker here","replace":"x"}')"
+  chk "PATCH with an ambiguous find is refused, with the count" "409 find_ambiguous 2" \
+      "$code $(jget 'd.get("error")' < /tmp/wo-d-amb.json) $(jget 'd.get("count")' < /tmp/wo-d-amb.json)"
+
+  api -X PATCH "$BASE/api/v1/notes/$NOTE" -d '{"find":"line two","replace":"line 2"}' > /tmp/wo-d-edit.json
+  chk "PATCH find/replace replaces exactly one occurrence" "True 1" \
+      "$(jget 'd.get("ok")' < /tmp/wo-d-edit.json) $(jget 'd.get("replaced")' < /tmp/wo-d-edit.json)"
+
+  code="$(curl -s -o /tmp/wo-d-conf.json -w '%{http_code}' -X PUT "$BASE/api/v1/notes/$NOTE" \
+    -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d "{\"content\":\"clobber\",\"base_version\":\"$V1\"}")"
+  chk "PUT with a stale base_version is refused and reports the current one" "409 version_conflict" \
+      "$code $(jget 'd.get("error")' < /tmp/wo-d-conf.json)"
+  chk "the refused write did not touch the note" "line 2" \
+      "$(api "$BASE/api/v1/notes/$NOTE" | jget 'd["content"].split(chr(10))[1]')"
+
+  chk "PUT without base_version still works (lenient default)" "200 True" \
+      "$(curl -s -o /tmp/wo-d-len.json -w '%{http_code}' -X PUT "$BASE/api/v1/notes/$NOTE" \
+         -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d '{"content":"# smoke\n"}') \
+         $(jget 'd.get("ok")' < /tmp/wo-d-len.json)"
+
+  chk "GET /notes?folder= lists the note with the requested sort" "Testing/smoke.md modified" \
+      "$(api "$BASE/api/v1/notes?folder=Testing&sort=modified" | jget 'd["notes"][0]') $(api "$BASE/api/v1/notes?folder=Testing" | jget 'd["sort"]')"
+
+  echo "== scenario E: MCP server over stdio, against the running instance =="
+  if [[ -f mcp-server/dist/index.js ]]; then
+    WEBOBSIDIAN_BASE_URL="$BASE" WEBOBSIDIAN_API_KEY="$KEY" node --test mcp-server/test/*.mjs > /tmp/wo-d-mcp.log 2>&1
+    mcp_rc=$?
+    chk "MCP handshake, tools/list and 8 tool calls (incl. conflict propagation)" "0" "$mcp_rc"
+    [[ $mcp_rc -ne 0 ]] && tail -20 /tmp/wo-d-mcp.log | sed 's/^/  MCP  /'
+  else
+    echo "  FAIL  mcp-server/dist/index.js missing (run npm run build)"; fail=$((fail+1))
+  fi
+
+  kill -TERM $SRV 2>/dev/null; wait $SRV 2>/dev/null
+else
+  echo "  FAIL  server did not start (scenario D)"; fail=$((fail+1))
+fi
+
+echo "== scenario F: WEBOBSIDIAN_AGENT_REQUIRE_VERSION=1 refuses unversioned writes =="
+if start_server env WEBOBSIDIAN_AGENT_REQUIRE_VERSION=1; then
+  curl -s -c /tmp/wo-f-cookies.txt -o /dev/null -X POST "$BASE/auth/login" \
+    -H 'Content-Type: application/json' -d '{"password":"123456"}'
+  KEY_F="$(curl -s -b /tmp/wo-f-cookies.txt -X POST "$BASE/api/keys" -H 'Content-Type: application/json' \
+    -d '{"name":"strict","scopes":["read","write"]}' \
+    | python3 -c 'import json,sys;print(json.load(sys.stdin).get("key",""))')"
+  code="$(curl -s -o /tmp/wo-f.json -w '%{http_code}' -X PUT "$BASE/api/v1/notes/Testing/strict.md" \
+    -H "X-API-Key: $KEY_F" -H 'Content-Type: application/json' -d '{"content":"# x\n"}')"
+  chk "strict mode: PUT without base_version is refused" "400 missing_base_version" \
+      "$code $(python3 -c 'import json;print(json.load(open("/tmp/wo-f.json")).get("error"))')"
+  code="$(curl -s -o /tmp/wo-f2.json -w '%{http_code}' -X PUT "$BASE/api/v1/notes/Testing/strict.md" \
+    -H "X-API-Key: $KEY_F" -H 'Content-Type: application/json' -d '{"content":"# x\n","base_version":""}')"
+  chk "strict mode: PUT with base_version still works" "200 True" \
+      "$code $(python3 -c 'import json;print(json.load(open("/tmp/wo-f2.json")).get("ok"))')"
+  kill -TERM $SRV 2>/dev/null; wait $SRV 2>/dev/null
+else
+  echo "  FAIL  server did not start (scenario F)"; fail=$((fail+1))
+fi
 
 echo
 echo "shutdown log (last boot):"

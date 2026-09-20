@@ -93,6 +93,38 @@ override (while the override itself works and does not force a change), a symlin
 and read through the API, and each boot logs the full 5-line teardown on `SIGTERM`. CI runs
 `npm test` and the smoke test on every push and PR (`.github/workflows/ci.yml`).
 
+## Adopted from other forks
+
+Not every good change to this project is an open PR. Fork survey (all 115 forks of
+`xnohat/webobsidian`, compared with `main...<fork>:<default_branch>`): 13 forks carry work upstream
+does not have. The two below were worth taking — re-implemented against this tree rather than
+cherry-picked, because their branches had drifted; each keeps a pointer to its origin in the code.
+
+| From | What | Where it lives here |
+|------|------|---------------------|
+| [`blueberry6401/webobsidian`](https://github.com/blueberry6401/webobsidian) | Agent API read-modify-write: content `version` on every read, `base_version` compare-and-set on write, atomic literal find/replace via `PATCH`, `/note-matches` grep with line numbers, `sort`/`order`/`folder` on `GET /notes`, segmented reads (`?offset=&limit=` in lines) | `server/src/services/{noteversion,noteedit,notegrep}.ts`, `server/src/services/vault.ts` (`listMarkdownFilesSorted`), `server/src/routes/agent.ts` |
+| [`Absenthome/webobsidian`](https://github.com/Absenthome/webobsidian) | MCP server (`mcp-server/`): stdio wrapper over the Agent API, so MCP hosts get the vault as tools | `mcp-server/` (10 tools; extended with `edit_note`/`grep_note`/segmented `read_note`/`base_version`) |
+
+Deliberate deviations from the sources, all documented in [docs/AGENT_API.md](AGENT_API.md):
+
+- `GET /notes/{path}` returns the **whole** note when `limit` is omitted (the source truncated at 500
+  lines), so existing clients that expect the full content keep working; paging is opt-in.
+- `base_version` is **optional** by default (absent → last-writer-wins, as before) with
+  `WEBOBSIDIAN_AGENT_REQUIRE_VERSION=1` for the source's strict behaviour. Turning it on by default
+  would have broken every already-deployed agent, including this fork's own wiki tooling.
+- `/note-matches` scans the file line by line instead of querying the search index: an agent grepping
+  a note needs every literal occurrence, and the index can lag a write.
+
+The remaining forks were surveyed and rejected: `picassio` (66 commits — a different central-vault
+sync + release architecture), `latticelabs-au` (the big docs/comment translation, mostly cosmetic,
+conflicts with everything), `CircuitBoardGames/webobsidian-GitPusher` and `hzxyayaya/USC-Wiki-Editor`
+(different products: pre-auth vault picker / contribution review on a Worker deployment),
+`AceDylan` + `omairaslam` (trusted-proxy and Cloudflare-Access auto-login — auth-critical, worth
+re-implementing deliberately rather than importing), `vinhnghiemnguyen` (real-time collaboration —
+out of upstream's single-user v1 scope), `quangtuandev` (R2 storage), `truongmanhsang` (themes/i18n
+already merged via the PRs above). `jasongriebeler` independently found the same healthcheck bug this
+fork fixed — corroboration for upstream [#30](https://github.com/xnohat/webobsidian/pull/30).
+
 ## Syncing a future upstream PR
 
 ```bash

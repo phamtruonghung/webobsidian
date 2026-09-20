@@ -1371,3 +1371,20 @@ Cập nhật lần cuối: 2026-09-20 (FR-9 — build identity: /healthz trả v
   icon globe màu accent cạnh tên. Icon `globe` thêm vào bộ Lucide. Verify headless Chrome qua CDP
   (MCP bị phiên khác giữ): badge hiện đúng note share + màu accent, menu có "Share…", dialog mở đủ
   controls (URL đúng token, toggle on, Set password…, Delete). Typecheck + build sạch.
+- 2026-09-20: Phase 21 (PRD 1.8, FR-6) — Agent API đọc–sửa an toàn + MCP server (adopt từ fork
+  blueberry6401 + Absenthome). Server: `services/noteversion.ts` (`version` = sha256 nội dung, 16 hex,
+  không dùng mtime), `services/noteedit.ts` (find/replace literal, `indexOf`+`split/join` để không
+  hiểu nhầm regex hay `$&`; 0 khớp → `find_not_found`, ≥2 khớp không `replaceAll` → `find_ambiguous`
+  + `count`), `services/notegrep.ts` (quét dòng literal, số dòng 1-based, `ranges`, `pre`/`post`,
+  `count` toàn bộ + `truncated`), `vault.listMarkdownFilesSorted` (modified/created/name × asc/desc,
+  dùng lại stat cache). Route `/api/v1`: `GET /notes?sort&order&folder`, `GET /notes/*?offset&limit`
+  (trả `version`/`totalLines`/`hasMore`; **không** cắt ngầm khi thiếu `limit` — khác bản gốc để không
+  phá client cũ), `PUT` nhận `base_version` (thiếu → last-writer-wins như trước; bật chặt bằng
+  `WEBOBSIDIAN_AGENT_REQUIRE_VERSION=1`), `PATCH` nhánh `find`/`replace` (giữ nguyên nhánh `append`),
+  `GET /note-matches`. Workspace `mcp-server` (stdio MCP, 10 tool: list/read/write/append/edit/grep/
+  delete/search/backlinks/tags). Test: 20 unit test mới; smoke-test thêm scenario D (agent API e2e:
+  create có version, đọc phân đoạn, grep, find mơ hồ 409, edit 1 chỗ, PUT version cũ 409, PUT thiếu
+  version vẫn chạy), E (MCP handshake thật qua stdio, 8 tool call, conflict → isError) và F (strict
+  mode). Docs: docs/AGENT_API.md viết lại (bảng endpoint + mục error + ví dụ đọc–sửa), README (§ Agent
+  API + MCP), mcp-server/README.md, PRD 1.8, CHANGELOG, docs/UPSTREAM_PR_MERGES.md → "Adopted from
+  other forks" (kèm danh sách fork đã khảo sát và lý do loại).

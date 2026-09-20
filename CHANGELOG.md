@@ -6,6 +6,29 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Agent API — safe read-modify-write, and an MCP server (adopted from other forks)
+
+- **Every read returns a `version`** (sha256 of the content — mtime-independent, so git autosync
+  cannot fake a conflict) and **writes can carry `base_version`**: the write applies only if the note
+  still has that version, otherwise `409 version_conflict` comes back with `currentVersion` to re-read.
+  `""` means "must not exist yet". Omitting it keeps the old last-writer-wins behaviour; set
+  `WEBOBSIDIAN_AGENT_REQUIRE_VERSION=1` to refuse unversioned writes (`400 missing_base_version`).
+- **`PATCH {"find": …, "replace": …}`** edits a literal string in place, server-side, so a stale copy
+  can never be written back. Matching is literal (no regex, no `$&` expansion); a `find` that occurs
+  more than once is refused with `409 find_ambiguous` + the occurrence count unless `replaceAll: true`.
+- **`GET /note-matches?path=&q=`** greps one note: every literal occurrence with its 1-based line
+  number, optional `context` lines, `case_sensitive`, `limit`.
+- **Segmented reads** — `GET /notes/{path}?offset=&limit=` are line numbers; the response adds
+  `version`, `totalLines`, `hasMore`. Omitting `limit` still returns the whole note (no silent
+  truncation for existing clients). **`GET /notes?sort=&order=&folder=`** orders the listing
+  (default: most recently modified first).
+- **`mcp-server/`** — new workspace: a stdio MCP server that wraps the Agent API, so MCP hosts
+  (Claude Code, Codex, …) get the vault as 10 tools, with `base_version` plumbed through.
+- Source: forks `blueberry6401/webobsidian` and `Absenthome/webobsidian` — re-implemented against
+  this tree, credited in the code and in docs/UPSTREAM_PR_MERGES.md → "Adopted from other forks".
+- Coverage: 20 new unit tests (find/replace literals, grep line numbers, version tokens), plus smoke
+  scenarios D–F (agent API end-to-end, strict mode, a real MCP handshake over stdio).
+
 ### Docs — README now documents this fork's setup
 
 - New README section **§ This fork**: what the fork contains, where it runs, the deploy-on-merge

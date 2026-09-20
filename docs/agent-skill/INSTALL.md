@@ -24,7 +24,7 @@ STEP 1 — Download the skill into your runtime's skills directory:
   Run (substitute your SKILLS_DIR):
       SKILLS_DIR=~/.claude/skills        # change for your runtime
       mkdir -p "$SKILLS_DIR/webobsidian"
-      curl -fsSL https://raw.githubusercontent.com/xnohat/webobsidian/main/docs/agent-skill/webobsidian/SKILL.md \
+      curl -fsSL https://raw.githubusercontent.com/phamtruonghung/webobsidian/main/docs/agent-skill/webobsidian/SKILL.md \
         -o "$SKILLS_DIR/webobsidian/SKILL.md"
   Confirm the file exists and starts with the YAML frontmatter "name: webobsidian".
 

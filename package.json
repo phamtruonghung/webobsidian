@@ -7,17 +7,19 @@
     "server",
     "web",
     "desktop",
-    "packages/webo"
+    "packages/webo",
+    "mcp-server"
   ],
   "scripts": {
     "test": "npm --workspace server run test && node --import tsx --test web/tests/store.test.ts",
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm --workspace server run dev",
     "dev:web": "npm --workspace web run dev",
-    "build": "npm --workspace web run build && npm --workspace server run build && npm --workspace packages/webo run build",
+    "build": "npm --workspace web run build && npm --workspace server run build && npm --workspace packages/webo run build && npm --workspace mcp-server run build",
     "webo": "node packages/webo/dist/bin.js",
+    "mcp": "node mcp-server/dist/index.js",
     "start": "npm --workspace server run start",
-    "typecheck": "npm --workspace server run typecheck && npm --workspace web run typecheck && npm --workspace packages/webo run typecheck",
+    "typecheck": "npm --workspace server run typecheck && npm --workspace web run typecheck && npm --workspace packages/webo run typecheck && npm --workspace mcp-server run typecheck",
     "desktop": "npm run build && npm --workspace desktop run dev",
     "desktop:dist": "npm run build && npm --workspace desktop run dist",
     "desktop:publish": "npm run build && npm --workspace desktop run dist:publish"
