@@ -12,7 +12,7 @@ vi.mock('./settings.js', () => ({
   updateSettings: vi.fn(),
 }));
 
-const { checkPassword, hasOverridePassword, changePassword } = await import('./auth.js');
+const { checkPassword, hasOverridePassword, hasCustomPassword, changePassword } = await import('./auth.js');
 
 beforeEach(() => {
   cfg.initialPassword = undefined;
@@ -51,15 +51,30 @@ describe('checkPassword — default (123456) gating via allowDefault', () => {
   });
 });
 
-describe('first-run password setup is not blocked by an override (regression for the #4 dead-end)', () => {
-  it('login rejects 123456 under an override, but change-password still sets the real password', async () => {
+describe('one condition gates login, change-password and mustChangePassword (#4 + #15 merged)', () => {
+  it('fresh install: the default works everywhere, so the change screen is shown', async () => {
+    expect(await checkPassword('123456')).toBe(true);
+    // hasCustomPassword=false ⇒ the UI forces the first-run change…
+    expect(await hasCustomPassword()).toBe(false);
+    // …and that screen submits 123456 as the current password, which must succeed.
+    await expect(changePassword('123456', 'my-real-password')).resolves.toBeUndefined();
+  });
+
+  it('override configured: the default is refused, so nothing asks to change it', async () => {
     cfg.initialPassword = 'recovery'; // override active
 
-    // Login path is hardened: the default is refused.
+    // Login path is hardened: the default is refused (#4 explicit + #15 policy).
     expect(await checkPassword('123456', { allowDefault: false })).toBe(false);
+    // …and refused as a "current password" too: under an override 123456 is not a
+    // credential at all, so accepting it here would contradict #15's shared
+    // condition and re-open the same hole behind requireAuth.
+    expect(await checkPassword('123456')).toBe(false);
 
-    // But the authenticated first-run "set a password" flow (which submits 123456
-    // as the current password) must still succeed and write the real hash.
-    await expect(changePassword('123456', 'my-real-password')).resolves.toBeUndefined();
+    // Consequence: the instance counts as "off the default", so the UI does not
+    // demand a change to a password that no longer works (PR #15).
+    expect(await hasCustomPassword()).toBe(true);
+
+    // A deliberate change still works — the override is the current password.
+    await expect(changePassword('recovery', 'my-real-password')).resolves.toBeUndefined();
   });
 });
