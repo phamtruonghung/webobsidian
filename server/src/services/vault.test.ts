@@ -5,7 +5,7 @@ import path from 'node:path';
 
 // Vault writes are real fs; redirect the root at a throwaway temp dir per test.
 const { settings } = vi.hoisted(() => ({
-  settings: { vault: { path: '', trash: '.trash' } },
+  settings: { vault: { path: '', trash: '.trash', allowedRoots: [] as string[] } },
 }));
 vi.mock('./settings.js', () => ({ getSettings: vi.fn(async () => settings) }));
 
@@ -16,6 +16,7 @@ beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'wo-vault-'));
   settings.vault.path = root;
   settings.vault.trash = '.trash';
+  settings.vault.allowedRoots = [];
 });
 afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
@@ -148,6 +149,71 @@ describe('path safety (resolveInVault)', () => {
       }
     },
   );
+});
+
+describe('symlinked vault contents (#23 — follow symlinks within allowedRoots)', () => {
+  let outside: string;
+  beforeEach(async () => {
+    outside = await fs.mkdtemp(path.join(os.tmpdir(), 'wo-outside-'));
+    settings.vault.allowedRoots = [outside];
+  });
+  afterEach(async () => {
+    settings.vault.allowedRoots = [];
+    await fs.rm(outside, { recursive: true, force: true });
+  });
+
+  it('lists a symlinked folder whose target is an allowed root', async () => {
+    await fs.mkdir(path.join(outside, 'shared'));
+    await fs.writeFile(path.join(outside, 'shared', 'note.md'), '# shared');
+    await fs.symlink(path.join(outside, 'shared'), abs('linked'), 'dir');
+
+    const tree = await vault.listTree();
+    const linked = tree.children?.find((c) => c.name === 'linked');
+    expect(linked?.type).toBe('folder');
+    expect(linked?.children?.map((c) => c.name)).toEqual(['note.md']);
+  });
+
+  it('reads a file reached through a symlink', async () => {
+    await fs.writeFile(path.join(outside, 'note.md'), 'hello');
+    await fs.symlink(path.join(outside, 'note.md'), abs('link.md'), 'file');
+    expect(await vault.readFileText('link.md')).toBe('hello');
+  });
+
+  it('writes a file inside a symlinked folder (the write lands in the target)', async () => {
+    await fs.mkdir(path.join(outside, 'shared'));
+    await fs.symlink(path.join(outside, 'shared'), abs('linked'), 'dir');
+    await vault.writeFileText('linked/new.md', 'written through the link');
+    expect(await fs.readFile(path.join(outside, 'shared', 'new.md'), 'utf8')).toBe(
+      'written through the link',
+    );
+    expect(await vault.readFileText('linked/new.md')).toBe('written through the link');
+  });
+
+  it('still refuses a symlink whose target is outside every allowed root', async () => {
+    const other = await fs.mkdtemp(path.join(os.tmpdir(), 'wo-other-'));
+    try {
+      await fs.writeFile(path.join(other, 'secret.md'), 'nope');
+      await fs.symlink(path.join(other, 'secret.md'), abs('bad.md'), 'file');
+      await expect(vault.readFileText('bad.md')).rejects.toMatchObject({ status: 400 });
+    } finally {
+      await fs.rm(other, { recursive: true, force: true });
+    }
+  });
+
+  it('does not recurse forever when a symlink points back at the vault root', async () => {
+    await vault.writeFileText('real.md', 'x');
+    await fs.symlink(root, abs('loop'), 'dir');
+    const tree = await vault.listTree();
+    const loop = tree.children?.find((c) => c.name === 'loop');
+    expect(loop?.type).toBe('folder');
+    expect(loop?.children).toEqual([]); // cycle guard: realpath already visited
+  });
+
+  it('skips a broken symlink instead of failing the whole listing', async () => {
+    await fs.symlink(abs('nope-not-here.md'), abs('broken.md'), 'file');
+    const tree = await vault.listTree();
+    expect(tree.children?.find((c) => c.name === 'broken.md')).toBeUndefined();
+  });
 });
 
 describe('trash round-trip', () => {
