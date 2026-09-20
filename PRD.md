@@ -1,7 +1,11 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.6 · Cập nhật: 2026-09-13 · Trạng thái: Draft
+> Phiên bản: 1.7 · Cập nhật: 2026-09-20 · Trạng thái: Draft
+> Changelog 1.7 (FR-9 — deploy pipeline của fork: LXC 107 + CI/CD deploy-on-merge): healthcheck probe
+> `127.0.0.1` (sửa bug `localhost` → `::1` khiến container báo unhealthy mãi); `deploy/deploy.sh`
+> idempotent (sync → backup rolling → build → up → smoke → tự rollback) chạy trên self-hosted runner
+> trong LXC 107; `deploy.yml` deploy sau khi CI xanh cho push vào `main`; runbook ở docs/DEPLOYMENT.md.
 > Changelog 1.6 (FR-2 — Preview tabs, requested to reduce tab clutter while browsing): selecting a
 > note reuses one italicized preview tab. Double-clicking its tab title keeps it open. Editing a
 > preview or creating a note also keeps its tab open; preview state persists with the workspace.
@@ -283,6 +287,16 @@ webobsidian/
 - `Dockerfile` multi-stage (build web + server → image gọn).
 - `docker-compose.yml`: mount vault volume, data volume, env cho password/secret.
 - Healthcheck (`start_period` đủ dài cho index vault lớn lần đầu), restart policy.
+- **Healthcheck probe `127.0.0.1`, không dùng `localhost`**: trong image alpine `localhost` resolve
+  ra `::1` (IPv6) còn server chỉ bind IPv4 → `wget` không fallback, probe fail mãi và container báo
+  `unhealthy` dù API phục vụ bình thường. Đã sửa ở cả `docker-compose.yml` và `Dockerfile`.
+- **Deploy pipeline của fork (LXC 107)**: deploy = `deploy/deploy.sh` (sync → backup rolling →
+  build → `up -d` → `deploy/smoke.sh`, tự rollback về image `webobsidian:rollback` nếu build hoặc
+  smoke fail). Chạy trên **self-hosted GitHub Actions runner đặt trong chính LXC** vì LXC nằm sau NAT
+  (không mở inbound); workflow `deploy.yml` trigger sau khi **CI xanh cho push vào `main`**
+  (`workflow_run` + kiểm tra `event == 'push'` để PR từ fork không bao giờ chạm runner) và có
+  `workflow_dispatch` để chạy tay. Vault là bind mount nên deploy **không** đụng tới note; `/data`
+  được snapshot giữ 1 bản rolling (`/root/backups`). Chi tiết + runbook: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 - **Self-deploy không sửa file tracked**: mọi tham số deploy đặt qua `.env` (git-ignored) —
   `VAULT_HOST_PATH` (host vault → `/vault`), `HTTP_BIND`/`HTTP_PORT` (publish), `WEBOBSIDIAN_PASSWORD`,
   `WEBOBSIDIAN_WATCH`, `TRUST_PROXY` (mặc định `true` — tin hop kề để `X-Forwarded-Proto` hoạt động khi

@@ -4,7 +4,19 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-13 (FR-2 — preview tabs for note browsing)
+Cập nhật lần cuối: 2026-09-20 (FR-9 — deploy pipeline LXC 107: deploy.sh + smoke.sh + deploy-on-merge CI/CD)
+
+---
+
+## Phase 15 — Deploy pipeline (LXC 107) & CI/CD deploy-on-merge — FR-9
+- [x] M15.1 Sửa healthcheck IPv4 (`127.0.0.1`) trong `docker-compose.yml` + `Dockerfile` (bug `localhost` → `::1`)
+- [x] M15.2 `deploy/deploy.sh` — idempotent: sync → backup rolling → tag rollback → build → `up -d` → wait healthy → smoke → tự rollback
+- [x] M15.3 `deploy/smoke.sh` — assert hành vi bản fork trên deployment đang chạy (`/auth/status` chỉ có `passwordSet`, `123456` bị từ chối khi đã có credential, login bằng password operator)
+- [x] M15.4 `.github/workflows/deploy.yml` — `workflow_run` sau CI xanh cho push vào `main` + `workflow_dispatch`, concurrency, chạy trên self-hosted runner
+- [ ] M15.5 Self-hosted runner trong LXC 107 (labels `webobsidian-107`) + service systemd
+- [ ] M15.6 Migrate LXC 107 sang bản fork (replace checkout upstream, giữ nguyên vault + volume `/data`), xoá override local + prune build cache
+- [ ] M15.7 Kiểm chứng sau migrate: data nguyên vẹn, login thật hoạt động, container healthy, URL public phục vụ bản fork
+- [x] M15.8 `docs/DEPLOYMENT.md` (layout, quy trình, runbook, backup/rollback, ghi lại lần migrate)
 
 ---
 
@@ -444,6 +456,20 @@ Cập nhật lần cuối: 2026-09-13 (FR-2 — preview tabs for note browsing)
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-09-20 (FR-9 — deploy pipeline LXC 107 + CI/CD deploy-on-merge): bản fork được deploy vào LXC 107
+  thay cho bản upstream. **Sửa bug healthcheck**: probe dùng `localhost` → trong image alpine resolve
+  ra `::1` còn server chỉ bind IPv4, `wget` không fallback nên probe fail mãi (3000+ lần) và container
+  báo `unhealthy` dù API phục vụ bình thường — nay `docker-compose.yml` và `Dockerfile` đều probe
+  `127.0.0.1`. Thêm `deploy/deploy.sh` (idempotent: sync → backup rolling 1 bản → tag image cũ thành
+  `webobsidian:rollback` → build → `up -d` → chờ healthy → `deploy/smoke.sh`; fail ở bất kỳ bước nào
+  thì tự retag + `up -d` về image cũ), `deploy/smoke.sh` (assert `/healthz`, SPA bundle,
+  `/auth/status` **chỉ** có `passwordSet` — dấu hiệu bản fork đang chạy, `123456` bị từ chối khi đã có
+  credential, password operator login được; không in secret) và `.github/workflows/deploy.yml`
+  (tự deploy sau khi CI xanh cho push vào `main`, kiểm tra `workflow_run.event == 'push'` để PR từ fork
+  không chạm runner, thêm `workflow_dispatch`, `concurrency` để deploy không chồng nhau, chạy trên
+  self-hosted runner trong chính LXC vì LXC nằm sau NAT). Migrate giữ nguyên vault bind
+  `/root/obsidian-data` và volume `webobsidian_webobsidian-data` (đổi checkout chứ không copy data) →
+  `settings.json`/`uistate.json`/index giữ nguyên. Runbook + rollback ở `docs/DEPLOYMENT.md`.
 - 2026-09-13: Completed M9.12 (PRD 1.6, FR-2) — reusable preview tabs for browsing notes,
   double-click to keep open, automatic promotion on edit/create, and persisted preview state.
   Latest note selection wins when reads finish out of order. Verified 11 store regression tests,

@@ -6,6 +6,26 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Deploy pipeline (LXC 107) — deploy-on-merge CI/CD
+
+- `deploy/deploy.sh`: idempotent deploy (sync → rolling backup → keep the previous image as
+  `webobsidian:rollback` → build → `up -d` → wait for healthy → smoke) with automatic rollback when
+  the build or the smoke test fails; `--bootstrap`, `--rollback`, `--backup-only` modes.
+- `deploy/smoke.sh`: asserts a *running* deployment (`/healthz`, the SPA bundle, `/auth/status`
+  exposing only `passwordSet`, `123456` refused once a credential is configured, the operator password
+  logging in) — never prints a secret.
+- `.github/workflows/deploy.yml`: deploys after **CI succeeds for a push to `main`** (plus manual
+  dispatch) on a self-hosted runner inside the target LXC, which is behind NAT. `workflow_run.event ==
+  'push'` is checked so a fork PR can never reach the deploy runner; `concurrency` prevents overlapping
+  deploys.
+- `docs/DEPLOYMENT.md`: host layout, deploy path, runbook, backup/rollback, one-time runner setup.
+
+### Fixed
+
+- Healthcheck probed `localhost`, which resolves to `::1` inside the image while the server binds IPv4
+  only — the container reported `unhealthy` forever while serving normally. Now `127.0.0.1` in both
+  `docker-compose.yml` and `Dockerfile`.
+
 ### Fork integration — every open upstream PR merged
 
 This tree is the `phamtruonghung/webobsidian` fork with all 17 open pull requests from
