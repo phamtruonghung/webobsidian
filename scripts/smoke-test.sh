@@ -113,11 +113,12 @@ if start_server env; then
   api() { curl -s -m 10 -H "X-API-Key: $KEY" -H 'Content-Type: application/json' "$@"; }
   jget() { python3 -c "import json,sys;d=json.load(sys.stdin);print($1)"; }
 
-  chk "PUT with base_version \"\" creates the note and returns its version" "200 True 16" \
-      "$(curl -s -o /tmp/wo-d-put.json -w '%{http_code}' -X PUT "$BASE/api/v1/notes/$NOTE" \
+  # `echo $got` collapses the whitespace introduced by the line continuations above.
+  got="$(curl -s -o /tmp/wo-d-put.json -w '%{http_code}' -X PUT "$BASE/api/v1/notes/$NOTE" \
          -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d "{$NOTE_JSON}") \
          $(jget 'd.get("ok")' < /tmp/wo-d-put.json) \
          $(jget 'len(d.get("version",""))' < /tmp/wo-d-put.json)"
+  chk "PUT with base_version \"\" creates the note and returns its version" "200 True 16" "$(echo $got)"
   V1="$(jget 'd["version"]' < /tmp/wo-d-put.json)"
 
   api "$BASE/api/v1/notes/$NOTE" > /tmp/wo-d-get.json
@@ -148,10 +149,10 @@ if start_server env; then
   chk "the refused write did not touch the note" "line 2" \
       "$(api "$BASE/api/v1/notes/$NOTE" | jget 'd["content"].split(chr(10))[1]')"
 
-  chk "PUT without base_version still works (lenient default)" "200 True" \
-      "$(curl -s -o /tmp/wo-d-len.json -w '%{http_code}' -X PUT "$BASE/api/v1/notes/$NOTE" \
-         -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d '{"content":"# smoke\n"}') \
+  got="$(curl -s -o /tmp/wo-d-len.json -w '%{http_code}' -X PUT "$BASE/api/v1/notes/$NOTE" \
+         -H "X-API-Key: $KEY" -H 'Content-Type: application/json' -d '{"content":"# smoke\\n"}') \
          $(jget 'd.get("ok")' < /tmp/wo-d-len.json)"
+  chk "PUT without base_version still works (lenient default)" "200 True" "$(echo $got)"
 
   chk "GET /notes?folder= lists the note with the requested sort" "Testing/smoke.md modified" \
       "$(api "$BASE/api/v1/notes?folder=Testing&sort=modified" | jget 'd["notes"][0]') $(api "$BASE/api/v1/notes?folder=Testing" | jget 'd["sort"]')"
