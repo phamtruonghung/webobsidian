@@ -139,6 +139,15 @@ sync_checkout() {
   log "  HEAD now $(git -C "$DEPLOY_DIR" rev-parse --short HEAD) — $(git -C "$DEPLOY_DIR" log -1 --pretty=%s)"
 }
 
+keep_rollback_image() {
+  if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    docker tag "$IMAGE" "$ROLLBACK_IMAGE"
+    log "current $IMAGE kept as $ROLLBACK_IMAGE"
+  else
+    log "no existing $IMAGE to keep as $ROLLBACK_IMAGE (first deploy here)"
+  fi
+}
+
 bootstrap() {
   log "bootstrap: adopting $DEPLOY_DIR as a checkout of $GIT_REMOTE_URL"
   [[ -n "$GIT_REMOTE_URL" ]] || die "GIT_REMOTE_URL is empty and $REPO_DIR has no origin remote"
@@ -223,7 +232,7 @@ case "$MODE" in
   rollback)
     ensure_env_file; backup; rollback; smoke ;;
   bootstrap)
-    bootstrap; ensure_env_file; build_and_up
+    bootstrap; ensure_env_file; keep_rollback_image; build_and_up
     wait_healthy || { rollback; die "new build unhealthy — rolled back"; }
     smoke || { rollback; die "smoke test failed — rolled back"; }
     log "bootstrap deploy OK ($(git -C "$DEPLOY_DIR" rev-parse --short HEAD))" ;;
@@ -231,9 +240,7 @@ case "$MODE" in
     ensure_env_file
     sync_checkout
     backup
-    if docker image inspect "$IMAGE" >/dev/null 2>&1; then
-      docker tag "$IMAGE" "$ROLLBACK_IMAGE"; log "current $IMAGE kept as $ROLLBACK_IMAGE"
-    fi
+    keep_rollback_image
     build_and_up
     wait_healthy || { rollback; die "new build unhealthy — rolled back"; }
     smoke || { rollback; die "smoke test failed — rolled back"; }
