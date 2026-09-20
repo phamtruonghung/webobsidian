@@ -41,3 +41,26 @@ docker compose up      # chạy full stack
 - `web/` — React SPA (components, lib, styles).
 - `data/` — runtime config & index (gitignored).
 - `docs/` — tài liệu bổ sung.
+
+## Ghi chú riêng của fork
+Đây là fork `phamtruonghung/webobsidian` (= upstream + toàn bộ PR đang mở đã merge). Xem
+[docs/UPSTREAM_PR_MERGES.md](docs/UPSTREAM_PR_MERGES.md) trước khi "sửa" một lỗi trông giống lỗi
+upstream.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues in this fork (`phamtruonghung/webobsidian`); use the `gh` CLI. See
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles map one-to-one: `needs-triage`, `needs-info`, `ready-for-agent`,
+`ready-for-human`, `wontfix` (plus repo labels `deploy`, `upstream-sync`). See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `PRD.md` + `IMPLEMENTATION_PLAN.md` are authoritative, `docs/adr/` and `CONTEXT.md`
+are created lazily by `/domain-modeling`. See `docs/agents/domain.md`.
