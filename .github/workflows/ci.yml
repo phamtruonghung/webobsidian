@@ -31,6 +31,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test
+        run: npm test
+
+      - name: Smoke test (auth hardening, symlinked vault, graceful shutdown)
+        run: scripts/smoke-test.sh
+
       - name: Build desktop bundle
         run: npm --workspace desktop run build
 
