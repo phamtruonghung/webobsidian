@@ -15,15 +15,15 @@ GitHub sync (incl. Git LFS), an API for AI agents, and community-plugin support.
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com)
 
-[Quick start](#-quick-start-docker) · [Features](#-features) · [Configuration](#-configuration) · [Agent API](#-agent-api) · [Development](#-local-development) · [Architecture](#-architecture)
+[Quick start](#-quick-start-docker) · [This fork](#-this-fork) · [Features](#-features) · [Configuration](#-configuration) · [Agent API](#-agent-api) · [Development](#-local-development) · [Architecture](#-architecture)
 
 > 📐 Design: [PRD.md](PRD.md) · 📋 Progress: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
-> 🔀 **Fork**: `phamtruonghung/webobsidian` — upstream `xnohat/webobsidian` plus **all 17 open
-> upstream PRs merged into `main`** (security fixes, symlink vaults, preview tabs, Catppuccin
-> themes, `webo` CLI, test suites). See [docs/UPSTREAM_PR_MERGES.md](docs/UPSTREAM_PR_MERGES.md);
-> sync a later PR with `scripts/merge-upstream-pr.sh <n>`. Deploying it (Docker Compose, backups,
-> rollback, deploy-on-merge CI/CD): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+> 🔀 **This repository is the fork `phamtruonghung/webobsidian`** — upstream
+> [`xnohat/webobsidian`](https://github.com/xnohat/webobsidian) plus **every open upstream pull
+> request**, and the tooling that deploys and verifies it. What changed, how it is deployed, how to
+> check which build is live and what to watch out for when upgrading:
+> **[§ This fork](#-this-fork)**.
 
 </div>
 
@@ -43,6 +43,78 @@ stack runs from a single `docker compose up`.
 > **Why?** To access and edit your knowledge base from any browser, on any device, while
 > keeping full ownership of your files — and to let AI agents read/write your vault through
 > a safe, scoped REST API.
+
+---
+
+## 🔀 This fork
+
+`phamtruonghung/webobsidian` = upstream [`xnohat/webobsidian`](https://github.com/xnohat/webobsidian)
+`v0.1.1` **plus every open upstream pull request merged into `main`**, plus the tooling that deploys
+and verifies it. Each PR keeps its own merge commit and author; the full table, the conflict
+decisions and the bugs found while merging are in
+[docs/UPSTREAM_PR_MERGES.md](docs/UPSTREAM_PR_MERGES.md).
+
+**Where it runs:** LXC 107 (Proxmox homelab), Docker Compose, published at
+`https://webobsidian.digitalciapp.com`. Merging to `main` deploys itself — CI → `Deploy (LXC 107)` on
+a self-hosted runner *inside that LXC* → `deploy/deploy.sh`: git sync → rolling backup → keep the
+previous image as `webobsidian:rollback` → build → `up -d` → wait for healthy → smoke test, with
+automatic rollback if the build, the health check or the smoke test fails. Host layout, runbook and
+rollback procedure: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+### Which build is running?
+
+```bash
+curl -s http://localhost:8787/healthz      # or the public URL
+# {"ok":true,"version":"0.1.1","build":"71fbbc2"}
+```
+
+`build` is the git commit the image was built from (`dev` = image built outside `deploy/deploy.sh`).
+Compare it with the branch tip, and check that the container runs the image you just built:
+
+```bash
+gh api repos/phamtruonghung/webobsidian/commits/main --jq '.sha[0:8]'
+docker inspect <container> --format '{{.Image}}'
+docker image inspect webobsidian:latest --format '{{.Id}}'   # the two must match
+gh run list --repo phamtruonghung/webobsidian --workflow "Deploy (LXC 107)" --limit 3
+```
+
+### Upgrade notes — coming from upstream `v0.1.1`
+
+- **The default password `123456` stops working as soon as any credential is configured** — a UI
+  password, `WEBOBSIDIAN_PASSWORD`, or `auth.passwordHash` in `settings.json`. It is refused both at
+  login *and* as the "current password" in change-password, because that is exactly the state where
+  the forced-change screen disappears. A fresh install is unchanged: `123456` works and must be
+  changed.
+- **`GET /auth/status` no longer returns `mustChangePassword`** — it was an unauthenticated oracle for
+  "this instance still accepts the default". Clients read the flag from `/auth/login` and `/auth/me`.
+- **The healthcheck probes `127.0.0.1`, not `localhost`.** Inside the image `localhost` resolves to
+  `::1` while the server binds IPv4 only and busybox `wget` does not fall back, so the old probe
+  failed on every interval and the container reported `unhealthy` while serving every request. If you
+  added a `docker-compose.override.yml` to work around that, delete it — the fix is in
+  `docker-compose.yml` and `Dockerfile` (also offered upstream as
+  [xnohat/webobsidian#30](https://github.com/xnohat/webobsidian/pull/30)).
+- **Builds are identified.** `docker compose build --build-arg GIT_SHA=<sha>` bakes the commit into
+  the image (`deploy/deploy.sh` passes it), and a deploy fails if the running container is not the
+  image it just built.
+- **New workspace `packages/webo`** — run `npm install` after pulling (or `docker compose up -d
+  --build`). Root `npm test` now runs the server suite (vitest) *and* the web suite, and root
+  `npm run typecheck` covers `packages/webo` too.
+- **Symlinks inside the vault are followed** when their target is inside `ALLOWED_ROOTS` (realpath
+  cycle guard); targets outside those roots are still refused.
+- User-facing: reusable preview tabs, Catppuccin themes, graph touch/drag, English Account tab and
+  comments, dark-mode text contrast, images whose name contains a space, and `DB_NAME_v2`-style table
+  cells no longer rendering as italics.
+
+### Keeping up with upstream
+
+```bash
+scripts/upstream-pr-status.sh              # every open upstream PR: merged here, or new?
+scripts/upstream-pr-status.sh --new-only   # just the new ones (exit 1 when any exist)
+scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head and merge with provenance
+```
+
+`.github/workflows/upstream-sync.yml` runs that check weekly and files an issue labelled
+`upstream-sync` only when a genuinely new third-party PR exists.
 
 ---
 
@@ -77,10 +149,11 @@ stack runs from a single `docker compose up`.
 ## 🚀 Quick start (Docker)
 
 ```bash
-git clone https://github.com/xnohat/webobsidian.git
+git clone https://github.com/phamtruonghung/webobsidian.git   # the fork (see § This fork)
 cd webobsidian
 cp .env.example .env          # edit VAULT_HOST_PATH, set WEBOBSIDIAN_PASSWORD
 docker compose up -d --build
+curl -s http://localhost:8787/healthz   # {"ok":true,"version":"0.1.1","build":"dev"} — "dev" = built here
 # open http://localhost:8787
 ```
 
@@ -88,11 +161,17 @@ Out of the box it serves the bundled `./sample-vault`, so the stack boots immedi
 deployment settings live in **`.env`** (git-ignored) — you never edit the tracked
 `docker-compose.yml`, so a `git pull` / redeploy keeps your config and vault mapping intact.
 
+No healthcheck override is needed in this fork: the probe targets `127.0.0.1` (upstream probed
+`localhost`, which resolves to `::1` inside the image while the server binds IPv4 only, so the
+container reported `unhealthy` forever). `build` in `/healthz` tells you which commit you are
+running; `docker compose build --build-arg GIT_SHA=$(git rev-parse --short HEAD)` bakes it in.
+
 ## 🖥️ Desktop app (no server setup)
 
 Prefer a native app? Grab an installer from the
-[**Releases**](https://github.com/xnohat/webobsidian/releases) page — available for
-**macOS / Windows / Linux** (arm64 · x64 · ia32):
+[**upstream Releases**](https://github.com/xnohat/webobsidian/releases) page — available for
+**macOS / Windows / Linux** (arm64 · x64 · ia32). This fork publishes no installers of its own yet;
+build one from here with `npm run desktop:dist`:
 
 | Platform | Download |
 |----------|----------|
@@ -189,7 +268,15 @@ Useful scripts:
 | `npm run dev` | Run server + web together in watch mode |
 | `npm run build` | Build the web SPA, then compile the server |
 | `npm start` | Run the production server (serves built web) |
-| `npm run typecheck` | Type-check both workspaces |
+| `npm run typecheck` | Type-check server, web **and** `packages/webo` |
+| `npm test` | Server suite (vitest) + web store suite (`node --test`) |
+| `npm run webo -- --help` | The bundled process-manager CLI (see below) |
+| `scripts/smoke-test.sh` | Boot the built server and assert the fork's behaviour (auth hardening, symlinked vault, SIGTERM teardown) — run `npm run build` first |
+
+The server suite covers the vault write/trash/path-safety paths, git autosync and a real-git
+integration run (a throwaway repo + bare remote, no network); the web suite covers the workspace
+store, including preview-tab state. CI (`.github/workflows/ci.yml`) runs typecheck, tests, the smoke
+test and the Docker image build on every push and PR.
 
 ---
 
@@ -331,6 +418,12 @@ See [PRD.md §2](PRD.md) for the full design.
 ## 🔒 Security notes
 
 - Master password is scrypt-hashed; the JWT secret is auto-generated.
+- **The well-known default `123456` is refused as soon as any credential is configured** (UI
+  password, `WEBOBSIDIAN_PASSWORD`, or a hand-edited `auth.passwordHash`) — it was previously accepted
+  *alongside* the real password, so an instance that set an env password and never opened the UI was
+  still reachable with the default. A fresh install still starts on `123456` and must change it.
+- `GET /auth/status` deliberately reports nothing about whether the default is still in use (that flag
+  was an unauthenticated oracle); `mustChangePassword` comes from `/auth/login` and `/auth/me`.
 - API keys are hashed at rest and scoped (`read` / `write` / `search`) with per-key rate
   limiting and audit logging.
 - All file paths are guarded against traversal; the vault picker is confined to
@@ -361,7 +454,16 @@ Contributions are welcome! A few house rules from [CLAUDE.md](CLAUDE.md):
 3. TypeScript everywhere; avoid `any`. Runtime config is JSON only (no DB engine).
 4. Never log secrets/tokens; hash before storing; guard against path traversal.
 
-Run `npm run typecheck` before opening a PR.
+Run `npm run typecheck` and `npm test` before opening a PR.
+
+Agent-facing conventions for this repo live in [docs/agents/](docs/agents/): where work is tracked
+(`issue-tracker.md`), the triage label vocabulary (`triage-labels.md`) and the domain-doc rules
+(`domain.md`).
+
+**Merging to `main` deploys itself** — CI must be green, then `.github/workflows/deploy.yml` runs
+`deploy/deploy.sh` on the self-hosted runner inside LXC 107 (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+That is intentional, so prefer a branch + PR over pushing straight to `main`, and keep the smoke test
+(`scripts/smoke-test.sh`, run by CI) passing — a broken `main` would be deployed.
 
 ---
 
