@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-08-20 (FR-1 — symlink vault roots: theo symlink trong allowedRoots, cycle guard realpath)
+Cập nhật lần cuối: 2026-09-13 (FR-2 — preview tabs for note browsing)
 
 ---
 
@@ -85,6 +85,8 @@ Cập nhật lần cuối: 2026-08-20 (FR-1 — symlink vault roots: theo symlin
 - [x] M9.9 Theme Obsidian-like (dark/light)
 - [x] M9.10 Navigation back/forward (toolbar ←/→ trên mọi view, history stack)
 - [x] M9.11 Search: filter/sort (match case, collapse, more context, sort) + sticky query box
+- [x] M9.12 Preview tabs: reuse one italicized tab while browsing; double-click or edit to keep open;
+      preserve permanent tabs and workspace state, and verify navigation and rapid note selection.
 
 ## Phase 10 — Docker & docs — FR-9
 - [x] M10.1 Multi-stage `Dockerfile` (web build → server runtime, git+git-lfs)
@@ -433,6 +435,10 @@ Cập nhật lần cuối: 2026-08-20 (FR-1 — symlink vault roots: theo symlin
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-09-13: Completed M9.12 (PRD 1.6, FR-2) — reusable preview tabs for browsing notes,
+  double-click to keep open, automatic promotion on edit/create, and persisted preview state.
+  Latest note selection wins when reads finish out of order. Verified 11 store regression tests,
+  `npm run typecheck`, `npm run build`, and browser checks of reuse, double-click, edits, and reload.
 - 2026-08-20 (FR-1 — symlink vault roots): vault dùng `readdir` với Dirent (semantics lstat) nên symlink
   không bao giờ được liệt kê (không `isDirectory`/`isFile`), và `assertRealpathInVault` chặn mọi đường
   thoát khỏi vault root đơn — vault có folder symlink trỏ ra ngoài root vô hình. **Sửa:** walks của
