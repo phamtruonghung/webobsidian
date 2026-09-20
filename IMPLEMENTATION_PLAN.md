@@ -13,9 +13,9 @@ Cập nhật lần cuối: 2026-09-20 (FR-9 — deploy pipeline LXC 107: deploy.
 - [x] M15.2 `deploy/deploy.sh` — idempotent: sync → backup rolling → tag rollback → build → `up -d` → wait healthy → smoke → tự rollback
 - [x] M15.3 `deploy/smoke.sh` — assert hành vi bản fork trên deployment đang chạy (`/auth/status` chỉ có `passwordSet`, `123456` bị từ chối khi đã có credential, login bằng password operator)
 - [x] M15.4 `.github/workflows/deploy.yml` — `workflow_run` sau CI xanh cho push vào `main` + `workflow_dispatch`, concurrency, chạy trên self-hosted runner
-- [ ] M15.5 Self-hosted runner trong LXC 107 (labels `webobsidian-107`) + service systemd
-- [ ] M15.6 Migrate LXC 107 sang bản fork (replace checkout upstream, giữ nguyên vault + volume `/data`), xoá override local + prune build cache
-- [ ] M15.7 Kiểm chứng sau migrate: data nguyên vẹn, login thật hoạt động, container healthy, URL public phục vụ bản fork
+- [x] M15.5 Self-hosted runner trong LXC 107 (labels `webobsidian-107`) + service systemd
+- [x] M15.6 Migrate LXC 107 sang bản fork (replace checkout upstream, giữ nguyên vault + volume `/data`), xoá override local + prune build cache
+- [x] M15.7 Kiểm chứng sau migrate: data nguyên vẹn, login thật hoạt động, container healthy, URL public phục vụ bản fork
 - [x] M15.8 `docs/DEPLOYMENT.md` (layout, quy trình, runbook, backup/rollback, ghi lại lần migrate)
 
 ---
@@ -470,6 +470,13 @@ Cập nhật lần cuối: 2026-09-20 (FR-9 — deploy pipeline LXC 107: deploy.
   self-hosted runner trong chính LXC vì LXC nằm sau NAT). Migrate giữ nguyên vault bind
   `/root/obsidian-data` và volume `webobsidian_webobsidian-data` (đổi checkout chứ không copy data) →
   `settings.json`/`uistate.json`/index giữ nguyên. Runbook + rollback ở `docs/DEPLOYMENT.md`.
+  **Đã chạy thật trên 107 (2026-09-20)**: bootstrap `--bootstrap` (backup → clone fork → build → up →
+  smoke 5/5), kiểm chứng sau migrate 18/18 PASS (vault 80 file + md5 manifest, `settings.json`,
+  `uistate.json` giống hệt trước; `/auth/status` chuyển từ `{passwordSet,mustChangePassword}` của
+  upstream sang `{passwordSet}` của fork; login password thật 200; URL public
+  `https://webobsidian.digitalciapp.com` phục vụ bản fork), và lần deploy **tự động** đầu tiên chạy
+  đúng luồng: merge PR #5 → CI xanh trên `main` → workflow `Deploy (LXC 107)` trên self-hosted runner
+  sync đúng commit `278f617`, backup, rebuild, healthy, smoke 5/5, log `deploy OK: 278f617 is live`.
 - 2026-09-13: Completed M9.12 (PRD 1.6, FR-2) — reusable preview tabs for browsing notes,
   double-click to keep open, automatic promotion on edit/create, and persisted preview state.
   Latest note selection wins when reads finish out of order. Verified 11 store regression tests,

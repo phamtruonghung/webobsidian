@@ -104,5 +104,31 @@ unhealthy while serving fine). Both the checkout and that workaround are gone:
 
 - the IPv4 healthcheck is fixed in the fork's `docker-compose.yml` **and** `Dockerfile`;
 - `deploy/deploy.sh --bootstrap` backed up `.env`, the git state and `/data`, replaced the directory
-  with a clone of this fork, restored `.env`, dropped the override, and deployed;
+  with a clone of this fork, restored `.env`, dropped the override, kept the upstream image as
+  `webobsidian:rollback`, and deployed;
 - the same vault path and the same named volume were reused, so no data was copied and none was lost.
+
+**Evidence from the run (2026-09-20T04:50Z, bootstrap → fork build `7afbc2c`):**
+
+| Check | Before | After |
+|-------|--------|-------|
+| vault files / manifest md5 | 80 / `de1ade2a…` | 80 / `de1ade2a…` (identical) |
+| `/data` `settings.json` md5 | `96c3e91d…` | `96c3e91d…` (identical) |
+| `/data` `uistate.json` md5 | `36028a5d…` | `36028a5d…` (identical) |
+| `auth` state | userPasswordHash set, jwtSecret 96 | unchanged |
+| `GET /auth/status` | `{"passwordSet":true,"mustChangePassword":false}` (upstream) | `{"passwordSet":true}` (fork) |
+| operator password login | 200 | 200 |
+| `123456` login | 401 | 401 |
+| container health | healthy | healthy |
+| public URL `/healthz` + `/auth/status` | served | served, fork build |
+
+18/18 post-migration checks passed (`/root/backups/webobsidian-backup/` holds the pre-migration
+`data-*.tar.gz`, `env-*`, `vault-manifest-*` and `git-state-*`). Note the rollback slot follows the
+north star of one previous image: after the first CI deploy it holds the previous **fork** image, not
+the upstream build — the upstream build is reproducible from `xnohat/webobsidian` if it were ever
+needed.
+
+The first **automatic** deploy then ran on its own: merging the deployment PR (#5) → CI on `main`
+green → `Deploy (LXC 107)` started on the self-hosted runner, synced the checkout to the merged commit
+`278f617`, took the rolling backup, kept the previous image as `webobsidian:rollback`, rebuilt, waited
+for `healthy`, passed all 5 smoke checks and logged `deploy OK: 278f617 is live`.
