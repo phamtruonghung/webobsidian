@@ -6,6 +6,13 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Docs — the vault must never be git-synced to this repository
+
+- Added the warning to `docs/DEPLOYMENT.md` (with the recovery procedure and one-line checks) and a
+  pointer in the README: pointing the app's **GitHub Sync** at this source repository pulls the whole
+  source tree into the vault, where it is served as notes. Use a dedicated notes-only repo for vault
+  versioning, and never store a push token for a repo your notes must not reach.
+
 ### Graph view paints correct theme colours (fixes dark-mode labels)
 
 - **Labels are no longer black in dark themes.** The canvas read its palette once at mount, so

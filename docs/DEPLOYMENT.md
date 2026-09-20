@@ -87,6 +87,35 @@ Browser-visible markers of this fork (vs upstream `v0.1.1`), no shell needed:
 - Opening notes reuses one italic **preview tab**; double-click its title to keep it (PR #29).
 - The graph view supports touch pan/pinch and node dragging (PR #25).
 
+## ⚠️ Vault git sync — never point it at this repository
+
+The app's **Settings → GitHub Sync** writes a `git` block into the app data
+(`settings.json`: remote/branch/autoSync/intervalSec/token). If that remote is *this source
+repository*, the sync clones/pulls the source tree **into the vault**: `CHANGELOG.md`,
+`IMPLEMENTATION_PLAN.md`, `PRD.md`, `server/`, `web/`, `docs/`, `.git` and friends show up as
+"notes" at `/note/CHANGELOG.md`, and the app keeps re-pulling them every `intervalSec`.
+
+That happened here (see issue #17): 28 top-level repo entries plus a `.git` in `/vault`, 16 MB of
+source tree served as notes. Recovery was: disable the sync + clear the remote, move the repo
+entries and `.git` out of the vault (not delete), restore the note folders found in `.trash`, and
+restart. Root entries went 35 → 7 and the vault 16 MB → 596 KB.
+
+Rules:
+
+- **Never** configure this repository (or any WebObsidian checkout) as the vault git remote.
+- Want vault versioning? Use a **dedicated notes-only repository**, and keep `.trash/` and
+  `sample-vault/` out of it.
+- **Never** store a push token for a repository you do not want your notes published to. Here the
+  push failed for lack of a token, which is the only reason no note ever left the host.
+- Check it in one command:
+
+```bash
+# what the app's sync is pointed at (and whether it is on)
+pct exec 107 -- bash -lc 'python3 -c "import json;print(json.load(open(\"/var/lib/docker/volumes/webobsidian_webobsidian-data/_data/settings.json\"))[\"git\"])"'
+# what is actually in the vault — anything in this list that is also in the repo top level is wrong
+pct exec 107 -- bash -lc 'ls -A /root/obsidian-data'
+```
+
 ## Runbook
 
 ```bash

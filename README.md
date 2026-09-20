@@ -105,6 +105,14 @@ gh run list --repo phamtruonghung/webobsidian --workflow "Deploy (LXC 107)" --li
   comments, dark-mode text contrast, images whose name contains a space, and `DB_NAME_v2`-style table
   cells no longer rendering as italics.
 
+### Never sync the vault to this repository
+
+The app's **Settings → GitHub Sync** must not be pointed at this source repository: it pulls the
+source tree (`CHANGELOG.md`, `IMPLEMENTATION_PLAN.md`, `server/`, `web/`, `.git`, …) into the vault,
+where the app then serves those files as notes. Use a dedicated notes-only repo for vault
+versioning — details and the recovery steps are in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#-vault-git-sync--never-point-it-at-this-repository).
+
 ### Keeping up with upstream
 
 ```bash
