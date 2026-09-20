@@ -22,7 +22,8 @@ GitHub sync (incl. Git LFS), an API for AI agents, and community-plugin support.
 > 🔀 **Fork**: `phamtruonghung/webobsidian` — upstream `xnohat/webobsidian` plus **all 17 open
 > upstream PRs merged into `main`** (security fixes, symlink vaults, preview tabs, Catppuccin
 > themes, `webo` CLI, test suites). See [docs/UPSTREAM_PR_MERGES.md](docs/UPSTREAM_PR_MERGES.md);
-> sync a later PR with `scripts/merge-upstream-pr.sh <n>`.
+> sync a later PR with `scripts/merge-upstream-pr.sh <n>`. Deploying it (Docker Compose, backups,
+> rollback, deploy-on-merge CI/CD): [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 </div>
 

@@ -45,7 +45,8 @@ docker compose up      # chạy full stack
 ## Ghi chú riêng của fork
 Đây là fork `phamtruonghung/webobsidian` (= upstream + toàn bộ PR đang mở đã merge). Xem
 [docs/UPSTREAM_PR_MERGES.md](docs/UPSTREAM_PR_MERGES.md) trước khi "sửa" một lỗi trông giống lỗi
-upstream.
+upstream. Deploy production chạy trên LXC 107 qua Docker Compose + self-hosted runner — quy trình,
+runbook và rollback ở [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Agent skills
 
