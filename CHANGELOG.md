@@ -6,6 +6,20 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Build identity in `/healthz` — "which version is running?"
+
+- `GET /healthz` now returns `{"ok":true,"version":"<repo version>","build":"<git commit>"}`; the
+  commit is baked into the image by the deploy pipeline (`--build-arg GIT_SHA=…`, surfaced as
+  `WEBOBSIDIAN_BUILD_SHA`), so the running version is one curl away — locally, from the host, or over
+  the public URL. `build: dev` means the image was built outside `deploy/deploy.sh`.
+- `deploy/deploy.sh` passes that build arg, and its smoke test now **asserts the running `build`
+  equals the deployed commit**.
+- **Fixed:** a deploy could rebuild the image while the old container kept running — `docker compose up
+  -d` does not always recreate when only the image content changed, and the smoke test cannot tell
+  because the previous container answers the same endpoints. `ensure_running_image` compares the
+  container's image id with the freshly built one, forces a recreate on mismatch, and fails the deploy
+  if the container still is not running the new build.
+
 ### Deploy pipeline (LXC 107) — deploy-on-merge CI/CD
 
 - `deploy/deploy.sh`: idempotent deploy (sync → rolling backup → keep the previous image as

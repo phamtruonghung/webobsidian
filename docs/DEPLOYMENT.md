@@ -43,6 +43,50 @@ sync checkout → rolling backup → tag current image as webobsidian:rollback
 
 `concurrency: deploy-lxc107` (no cancel) means deploys queue instead of overlapping.
 
+## Which version is running, and how to verify it
+
+`GET /healthz` answers it directly (no auth), from inside the host or from the public URL:
+
+```bash
+curl -s http://127.0.0.1:8787/healthz          # on the LXC
+curl -s https://webobsidian.digitalciapp.com/healthz
+# {"ok":true,"version":"0.1.1","build":"8e92d25"}
+```
+
+- `version` — the repo version (`package.json`, not the server workspace's own counter).
+- `build` — the git commit the image was built from; `dev` means the image was built outside
+  `deploy/deploy.sh` (e.g. a plain `docker compose build`).
+
+The deploy pipeline bakes that commit in (`--build-arg GIT_SHA=…`), verifies the running container
+actually is the freshly built image (`ensure_running_image`, which forces a recreate when Compose left
+the old container up), and the smoke test asserts `build` equals the deployed commit — so a deploy that
+did not really restart the service fails instead of passing silently.
+
+Other ways to check, in decreasing order of directness:
+
+```bash
+# what the pipeline recorded
+ssh root@192.168.1.22 'pct exec 107 -- git -C /root/webobsidian log -1 --pretty="%h %cs %s"'
+ssh root@192.168.1.22 'pct exec 107 -- docker inspect webobsidian --format "{{.Config.Image}} {{.Image}} {{.State.Health.Status}} {{.State.StartedAt}}"'
+ssh root@192.168.1.22 'pct exec 107 -- docker images --format "{{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedSince}}"'
+# the two images must match; the container must run the id of webobsidian:latest
+
+# what GitHub Actions did (triggered by the merge that deployed it)
+gh run list --repo phamtruonghung/webobsidian --workflow "Deploy (LXC 107)" --limit 3
+gh run view <run-id> --log | grep 'deploy OK'
+
+# is the fork ahead/behind the deployed commit?
+git fetch origin && git log --oneline -1 origin/main
+```
+
+Browser-visible markers of this fork (vs upstream `v0.1.1`), no shell needed:
+
+- `https://webobsidian.digitalciapp.com/auth/status` → `{"passwordSet":true}`. Upstream also returned
+  `mustChangePassword` on that unauthenticated route; its absence means PR #15 is running.
+- Settings → **Appearance** offers the Catppuccin flavours (PR #11).
+- Opening notes reuses one italic **preview tab**; double-click its title to keep it (PR #29).
+- The graph view supports touch pan/pinch and node dragging (PR #25).
+
 ## Runbook
 
 ```bash

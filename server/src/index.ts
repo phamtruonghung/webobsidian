@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import chokidar from 'chokidar';
@@ -34,6 +34,21 @@ import { getVaultRoot, ensureVault, invalidateStat } from './services/vault.js';
 import { startAutoSync, stopAutoSync } from './services/autosync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Product version (the repo's root package.json — the server workspace has its own 0.1.x
+ * counter, which is not what an operator means by "which version"). Resolved relative to
+ * this module so it works both from `server/dist/index.js` inside the image (where
+ * ../../package.json is /app/package.json) and from `server/src/index.ts` under tsx.
+ */
+const VERSION: string = (() => {
+  try {
+    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+    return typeof pkg.version === 'string' ? pkg.version : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+})();
 
 // Keep the local server alive on stray async errors (e.g. a deferred library task
 // throwing) instead of crashing the whole process — log loudly so bugs aren't hidden.
@@ -99,8 +114,16 @@ async function main() {
     app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
   }
 
-  // Health (no auth) — for docker healthcheck
-  app.get('/healthz', (_req, res) => res.json({ ok: true }));
+  // Health (no auth) — for the docker healthcheck and for answering "which build is this?".
+  // `version` is the repo version; `build` is the git commit the image was built from,
+  // baked in by the deploy pipeline through the GIT_SHA build arg ("dev" = built outside it).
+  app.get('/healthz', (_req, res) =>
+    res.json({
+      ok: true,
+      version: VERSION,
+      build: process.env.WEBOBSIDIAN_BUILD_SHA || 'dev',
+    }),
+  );
 
   // Routes. NOTE: specific /api/* routers must be registered BEFORE the broad
   // '/api' search router, whose router-level requireAuth middleware would

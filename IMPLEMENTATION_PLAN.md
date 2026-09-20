@@ -4,7 +4,15 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-20 (FR-9 — deploy pipeline LXC 107: deploy.sh + smoke.sh + deploy-on-merge CI/CD)
+Cập nhật lần cuối: 2026-09-20 (FR-9 — build identity: /healthz trả version+build, deploy assert đúng image đang chạy)
+
+---
+
+## Phase 16 — Build identity & deploy truthfulness — FR-9
+- [x] M16.1 `/healthz` trả `{ok, version, build}` (version = package.json repo, build = git commit nhúng lúc build qua `--build-arg GIT_SHA`)
+- [x] M16.2 `deploy/deploy.sh` truyền build arg + `ensure_running_image` (phát hiện container đang chạy image cũ → `--force-recreate`, fail nếu vẫn không khớp)
+- [x] M16.3 Smoke test assert `build` của deployment == commit vừa deploy (chống deploy "no-op")
+- [x] M16.4 `docs/DEPLOYMENT.md` mục "Which version is running, and how to verify it" (curl, docker inspect, GitHub Actions, marker trên UI)
 
 ---
 
@@ -456,6 +464,18 @@ Cập nhật lần cuối: 2026-09-20 (FR-9 — deploy pipeline LXC 107: deploy.
       `desktop/release`.
 
 ### Nhật ký tiến độ
+- 2026-09-20 (FR-9 — build identity + deploy truthfulness): câu hỏi "đang chạy version nào?" giờ trả lời
+  được bằng 1 lệnh. `/healthz` trả `{ok, version, build}` với `version` đọc từ `package.json` gốc và
+  `build` là commit nhúng lúc build (`--build-arg GIT_SHA` → `ENV WEBOBSIDIAN_BUILD_SHA`, `dev` nếu build
+  ngoài pipeline). Phát hiện kèm sửa một lỗi thật: **deploy có thể rebuild image mà container cũ vẫn
+  chạy** — `docker compose up -d` không luôn recreate khi chỉ nội dung image đổi, và smoke test không
+  phát hiện được vì container cũ trả lời đúng các endpoint đó (đúng tình trạng trên 107: container vẫn
+  chạy image build từ lúc bootstrap trong khi tag `latest` đã được build lại 5 lần). Thêm
+  `ensure_running_image()` so image id container với image vừa build → `--force-recreate` khi lệch, và
+  **fail deploy nếu sau đó vẫn không khớp**; smoke test assert `build` == commit vừa deploy. Thêm mục
+  "Which version is running, and how to verify it" trong `docs/DEPLOYMENT.md` (curl /healthz, docker
+  inspect image id, log GitHub Actions, và marker nhìn thấy trên UI: Catppuccin themes, preview tab,
+  graph touch, `/auth/status` không còn `mustChangePassword`).
 - 2026-09-20 (FR-9 — deploy pipeline LXC 107 + CI/CD deploy-on-merge): bản fork được deploy vào LXC 107
   thay cho bản upstream. **Sửa bug healthcheck**: probe dùng `localhost` → trong image alpine resolve
   ra `::1` còn server chỉ bind IPv4, `wget` không fallback nên probe fail mãi (3000+ lần) và container

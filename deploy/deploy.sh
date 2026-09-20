@@ -173,10 +173,32 @@ bootstrap() {
 }
 
 build_and_up() {
-  log "building $IMAGE"
-  compose build
+  local sha
+  sha="$(git -C "$DEPLOY_DIR" rev-parse --short HEAD 2>/dev/null || echo dev)"
+  log "building $IMAGE (GIT_SHA=$sha)"
+  compose build --build-arg "GIT_SHA=$sha"
   log "starting stack (project $PROJECT)"
   compose up -d --remove-orphans
+}
+
+# A deploy that rebuilds the image but leaves the old container running is a silent no-op:
+# `docker compose up -d` does not always recreate when only the image content changed, and
+# the smoke test cannot tell (the previous container answers the same endpoints). So compare
+# what is running against what was just built and force a recreate when they differ.
+ensure_running_image() {
+  local want have cid
+  want="$(docker image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null || true)"
+  cid="$(compose ps -q webobsidian 2>/dev/null || true)"
+  [[ -n "$cid" ]] || die "no webobsidian container after 'up -d'"
+  have="$(docker inspect -f '{{.Image}}' "$cid" 2>/dev/null || echo none)"
+  if [[ "$want" != "$have" ]]; then
+    log "container runs ${have:0:19}… but $IMAGE is ${want:0:19}… — recreating to run the new build"
+    compose up -d --force-recreate --remove-orphans
+    cid="$(compose ps -q webobsidian)"
+    have="$(docker inspect -f '{{.Image}}' "$cid" 2>/dev/null || echo none)"
+  fi
+  [[ "$want" == "$have" ]] || die "container is not running the built image ($have != $want)"
+  log "container runs $IMAGE (${want:0:19}…)"
 }
 
 wait_healthy() {
@@ -218,11 +240,12 @@ rollback() {
 }
 
 smoke() {
-  local port url
+  local port url build
   port="$(env_get HTTP_PORT)"; port="${port:-8787}"
   url="${SELF_URL:-http://127.0.0.1:$port}"
-  log "smoke test against $url"
-  DEPLOY_DIR="$DEPLOY_DIR" ENV_FILE="$ENV_FILE" "$SCRIPT_DIR/smoke.sh" "$url"
+  build="$(git -C "$DEPLOY_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+  log "smoke test against $url${build:+ (expecting build $build)}"
+  DEPLOY_DIR="$DEPLOY_DIR" ENV_FILE="$ENV_FILE" EXPECT_BUILD="$build" "$SCRIPT_DIR/smoke.sh" "$url"
 }
 
 # ── modes ────────────────────────────────────────────────────────────────────────────────────────
@@ -232,7 +255,7 @@ case "$MODE" in
   rollback)
     ensure_env_file; backup; rollback; smoke ;;
   bootstrap)
-    bootstrap; ensure_env_file; keep_rollback_image; build_and_up
+    bootstrap; ensure_env_file; keep_rollback_image; build_and_up; ensure_running_image
     wait_healthy || { rollback; die "new build unhealthy — rolled back"; }
     smoke || { rollback; die "smoke test failed — rolled back"; }
     log "bootstrap deploy OK ($(git -C "$DEPLOY_DIR" rev-parse --short HEAD))" ;;
@@ -242,6 +265,7 @@ case "$MODE" in
     backup
     keep_rollback_image
     build_and_up
+    ensure_running_image
     wait_healthy || { rollback; die "new build unhealthy — rolled back"; }
     smoke || { rollback; die "smoke test failed — rolled back"; }
     log "deploy OK: $(git -C "$DEPLOY_DIR" rev-parse --short HEAD 2>/dev/null || echo "$DEPLOY_DIR") is live" ;;

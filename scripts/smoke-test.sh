@@ -52,6 +52,9 @@ echo "== scenario A: fresh install (no override) =="
 if start_server env; then
   chk "GET /auth/status has no mustChangePassword (#15)" "['passwordSet']" \
       "$(curl -s "$BASE/auth/status" | python3 -c "import json,sys;print(sorted(json.load(sys.stdin).keys()))")"
+  chk "GET /healthz reports ok + version + build" "ok 0.1.1" \
+      "$(curl -s "$BASE/healthz" | python3 -c "import json,sys;d=json.load(sys.stdin);print('ok' if d.get('ok') else 'not-ok', d.get('version','?'), d.get('build','?') if d.get('build') else 'missing')" | awk '{print $1, $2}')"
+  echo "  INFO  /healthz build: $(curl -s "$BASE/healthz" | python3 -c "import json,sys;print(json.load(sys.stdin).get('build','?'))")"
   chk "login 123456 on a fresh install: accepted, change forced" "200 True" "$(login 123456)"
 else
   echo "  FAIL  server did not start (scenario A)"; fail=$((fail+1))

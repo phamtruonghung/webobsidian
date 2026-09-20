@@ -15,6 +15,11 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Git commit this image was built from, injected by deploy/deploy.sh (--build-arg GIT_SHA=…)
+# and surfaced by GET /healthz as `build`, so "which version is running?" is one curl away.
+ARG GIT_SHA=dev
+ENV WEBOBSIDIAN_BUILD_SHA=$GIT_SHA
+
 # git + git-lfs are required for vault sync
 RUN apk add --no-cache git git-lfs && git lfs install --system
 
