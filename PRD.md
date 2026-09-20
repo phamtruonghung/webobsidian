@@ -1,7 +1,17 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.7 · Cập nhật: 2026-09-20 · Trạng thái: Draft
+> Phiên bản: 1.8 · Cập nhật: 2026-09-20 · Trạng thái: Draft
+> Changelog 1.8 (FR-6 — Agent API đọc–sửa an toàn + MCP server): mọi lần đọc trả `version`
+> (sha256 nội dung, không phụ thuộc mtime nên autosync git không tạo conflict giả); `PUT`/`PATCH`
+> nhận `base_version` để compare-and-set (`""` = bắt buộc chưa tồn tại), lệch → `409 version_conflict`
+> kèm `currentVersion`; `PATCH {"find","replace"}` sửa tại chỗ theo chuỗi literal (không regex,
+> không nội suy `$&`), trùng nhiều chỗ → `409 find_ambiguous` + số lần khớp; đọc phân đoạn theo dòng
+> (`?offset=&limit=`) trả `totalLines`/`hasMore`; `GET /note-matches` grep literal trong 1 note kèm số
+> dòng + ngữ cảnh; `GET /notes` thêm `sort`/`order`/`folder`. Chế độ chặt
+> `WEBOBSIDIAN_AGENT_REQUIRE_VERSION=1` từ chối ghi thiếu `base_version`. Kèm workspace
+> `mcp-server` (stdio MCP) bọc Agent API cho Claude Code/Codex… với 10 tool. Tham khảo (adopt) từ
+> fork blueberry6401 + Absenthome — xem docs/UPSTREAM_PR_MERGES.md.
 > Changelog 1.7 (FR-9 — deploy pipeline của fork: LXC 107 + CI/CD deploy-on-merge): healthcheck probe
 > `127.0.0.1` (sửa bug `localhost` → `::1` khiến container báo unhealthy mãi); `deploy/deploy.sh`
 > idempotent (sync → backup rolling → build → up → smoke → tự rollback) chạy trên self-hosted runner
@@ -268,7 +278,13 @@ webobsidian/
 ### FR-6 · API Gate (AI Agent)
 - Quản lý nhiều **API key** (tạo/thu hồi, scope: read / write / search).
 - REST endpoints `/api/v1/*` xác thực bằng header `Authorization: Bearer <key>` hoặc `X-API-Key`.
-- Năng lực: list notes, read note, create/update/delete note, search, get backlinks, append.
+- Năng lực: list notes (sort/order/folder), read note (phân đoạn theo dòng + `version`), create/update
+  (compare-and-set qua `base_version`), delete, append, find/replace literal tại chỗ, grep 1 note
+  (`/note-matches`), search, get backlinks.
+- **Chống ghi đè**: `version` = hash nội dung; `base_version` sai → `409 version_conflict` +
+  `currentVersion`; `find` mơ hồ → `409 find_ambiguous` + `count`. Chế độ chặt:
+  `WEBOBSIDIAN_AGENT_REQUIRE_VERSION=1` (thiếu `base_version` → `400 missing_base_version`).
+- Workspace `mcp-server`: stdio MCP server bọc Agent API (10 tool) cho các MCP host.
 - Rate limit + audit log mỗi key.
 
 ### FR-7 · QMD Search engine
@@ -507,11 +523,12 @@ GET    /share/{id}                # trang HTML public — SERVER-RENDERED (SEO m
 
 ### Agent API (API-key auth) — `/api/v1`
 ```
-GET    /api/v1/notes                 # list (paginate)
-GET    /api/v1/notes/{path}          # read
-PUT    /api/v1/notes/{path}          # create/update
-PATCH  /api/v1/notes/{path}/append   # append content
+GET    /api/v1/notes?offset=&limit=&sort=&order=&folder=   # list (paginate + order)
+GET    /api/v1/notes/{path}?offset=&limit=                 # read (phân đoạn dòng) + version
+PUT    /api/v1/notes/{path}                                # create/update ({content, base_version?})
+PATCH  /api/v1/notes/{path}                                # append hoặc {find, replace, replaceAll?}
 DELETE /api/v1/notes/{path}
+GET    /api/v1/note-matches?path=&q=&case_sensitive=&limit=&context=
 GET    /api/v1/search?q=...&limit=
 GET    /api/v1/backlinks?path=
 GET    /api/v1/tags

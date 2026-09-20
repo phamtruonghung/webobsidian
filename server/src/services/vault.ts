@@ -462,3 +462,41 @@ export async function listMarkdownFiles(): Promise<string[]> {
   await walk(root, new Set());
   return out;
 }
+
+export type NoteSort = 'modified' | 'created' | 'name';
+export type SortOrder = 'asc' | 'desc';
+
+/**
+ * Like listMarkdownFiles(), but ordered for the Agent API's `GET /notes?sort=&order=`.
+ * Default is most-recently-modified first, so a freshly touched note never falls past
+ * the caller's `limit` into an unread tail. Time sorts use the same stat cache as
+ * listTree(), so this costs one stat per file at most.
+ *
+ * Adopted from the fork `blueberry6401/webobsidian`; see docs/UPSTREAM_PR_MERGES.md →
+ * "Adopted from other forks".
+ */
+export async function listMarkdownFilesSorted(
+  sort: NoteSort = 'modified',
+  order: SortOrder = 'desc',
+): Promise<string[]> {
+  const files = await listMarkdownFiles();
+  if (sort === 'name') {
+    files.sort((a, b) => a.localeCompare(b));
+  } else {
+    const root = await getVaultRoot();
+    const stats = new Map<string, { m: number; c: number }>();
+    await Promise.all(files.map(async (rel) => {
+      stats.set(rel, await fileStat(path.join(root, rel), rel));
+    }));
+    files.sort((a, b) => {
+      const sa = stats.get(a) ?? { m: 0, c: 0 };
+      const sb = stats.get(b) ?? { m: 0, c: 0 };
+      const va = sort === 'modified' ? sa.m : sa.c;
+      const vb = sort === 'modified' ? sb.m : sb.c;
+      if (va !== vb) return va - vb;
+      return a.localeCompare(b);
+    });
+  }
+  if (order === 'desc') files.reverse();
+  return files;
+}

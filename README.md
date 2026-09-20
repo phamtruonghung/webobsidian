@@ -136,7 +136,10 @@ scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head and merge 
 - 🌐 **Public sharing** — turn any note into a read-only, server-rendered (SEO-friendly)
   public page at `/share/<token>`, optionally password-protected.
 - 🤖 **Agent API** — scoped API keys (`read` / `write` / `search`) let AI agents work with
-  the vault over REST at `/api/v1`. See [docs/AGENT_API.md](docs/AGENT_API.md).
+  the vault over REST at `/api/v1`. Every read returns a content `version`, writes can carry
+  `base_version` (compare-and-set, no clobbering), `PATCH` edits in place with literal
+  find/replace and `/note-matches` greps a note with line numbers. Bundled **MCP server** for
+  MCP hosts. See [docs/AGENT_API.md](docs/AGENT_API.md).
 - 🧩 **Community plugins** — install Obsidian plugins from GitHub; loaded against an
   Obsidian-API compatibility shim (subset support).
 - 📱 **Responsive / mobile** — drawer sidebars, edge-swipe, an on-keyboard formatting
@@ -268,10 +271,11 @@ Useful scripts:
 | `npm run dev` | Run server + web together in watch mode |
 | `npm run build` | Build the web SPA, then compile the server |
 | `npm start` | Run the production server (serves built web) |
-| `npm run typecheck` | Type-check server, web **and** `packages/webo` |
+| `npm run typecheck` | Type-check server, web, `packages/webo` **and** `mcp-server` |
 | `npm test` | Server suite (vitest) + web store suite (`node --test`) |
 | `npm run webo -- --help` | The bundled process-manager CLI (see below) |
-| `scripts/smoke-test.sh` | Boot the built server and assert the fork's behaviour (auth hardening, symlinked vault, SIGTERM teardown) — run `npm run build` first |
+| `npm run mcp` | The bundled MCP server over stdio (needs `WEBOBSIDIAN_BASE_URL` + `WEBOBSIDIAN_API_KEY`) |
+| `scripts/smoke-test.sh` | Boot the built server five times and assert the fork's behaviour (auth hardening, symlinked vault, SIGTERM teardown, Agent API read-modify-write, MCP handshake) — run `npm run build` first |
 
 The server suite covers the vault write/trash/path-safety paths, git autosync and a real-git
 integration run (a throwaway repo + bare remote, no network); the web suite covers the workspace
@@ -314,6 +318,25 @@ Everything else — git remote/token, API keys, plugins, theme — is configured
 Scoped REST API for AI agents at `/api/v1`. Create an API key in **Settings → API Keys**,
 then pass it as a header. Full reference: **[docs/AGENT_API.md](docs/AGENT_API.md)**.
 
+**Safe read-modify-write.** A read returns the note's `version`; pass it back as `base_version` on
+the next `PUT`/`PATCH` and a concurrent edit becomes a `409 version_conflict` (with the current
+version to re-read) instead of a silent overwrite. Long notes can be read in line slices
+(`?offset=&limit=`), and `PATCH {"find": …, "replace": …}` edits a literal string in place —
+server-side, so a stale copy can never be written back. Set `WEBOBSIDIAN_AGENT_REQUIRE_VERSION=1`
+to refuse unversioned writes outright.
+
+### 🧩 MCP server (for MCP hosts)
+
+`mcp-server/` is a stdio [MCP](https://modelcontextprotocol.io) server that wraps this API, so
+Claude Code / Codex / any MCP host gets the vault as tools (`read_note`, `edit_note`, `grep_note`,
+`search_notes`, …) with the conflict rules above built in:
+
+```bash
+npm run build && npm run mcp        # needs WEBOBSIDIAN_BASE_URL + WEBOBSIDIAN_API_KEY
+```
+
+See [`mcp-server/README.md`](mcp-server/README.md) for the host config snippet.
+
 ### 🧩 Drop-in agent skill (no clone needed)
 
 Want your coding agent (Claude Code, Codex, OpenCode, Cursor…) to work with your vault
@@ -331,7 +354,7 @@ STEP 1 — Download the skill into your runtime's skills directory
   (Claude Code: ~/.claude/skills · Codex: ~/.codex/skills · OpenCode: ~/.opencode/skills):
       SKILLS_DIR=~/.claude/skills        # change for your runtime
       mkdir -p "$SKILLS_DIR/webobsidian"
-      curl -fsSL https://raw.githubusercontent.com/xnohat/webobsidian/main/docs/agent-skill/webobsidian/SKILL.md \
+      curl -fsSL https://raw.githubusercontent.com/phamtruonghung/webobsidian/main/docs/agent-skill/webobsidian/SKILL.md \
         -o "$SKILLS_DIR/webobsidian/SKILL.md"
 
 STEP 2 — Set up credentials (ASK ME; never echo the key back). Ask me for my WebObsidian
