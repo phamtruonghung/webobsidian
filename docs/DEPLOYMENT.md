@@ -73,9 +73,16 @@ gates on. It never prints a secret.
 - **Image rollback**: the previous image is retagged as `webobsidian:rollback` before each build, so
   `deploy/deploy.sh --rollback` brings the last good build back in seconds. A failed smoke test
   triggers that automatically.
+- **What rollback does *not* cover**: it reverts the **image**, not configuration. If `.env` itself is
+  wrong (e.g. `WEBOBSIDIAN_PASSWORD` drift), the rolled-back container still reads the same `.env`, so
+  the deploy fails, exits non-zero, and leaves the previous build live but with the drifted config —
+  fix `.env` and run the deploy again. Rehearsed locally: a shell `WEBOBSIDIAN_PASSWORD` overriding
+  `.env` made smoke fail with `401`, and the script retagged the previous image, recreated the
+  container, reported `smoke test failed — rolled back` and exited `1`.
 - **Data restore**: the vault is a bind mount and is never modified; to restore `/data`, extract
   `data-<ts>.tar.gz` into `/var/lib/docker/volumes/webobsidian_webobsidian-data/_data` with the stack
-  stopped.
+  stopped (`tar -x -z -f data-<ts>.tar.gz -C <that dir>`; dash-prefixed flags so a host tar wrapper
+  can't mangle them).
 
 ## One-time host setup (already done, kept for rebuilds)
 
