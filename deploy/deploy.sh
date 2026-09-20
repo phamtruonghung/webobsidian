@@ -20,6 +20,7 @@
 #   BACKUP_DIR    rolling backup location                (default: /root/backups)
 #   BACKUP_KEEP   how many backups to keep               (default: 1 — one rolling backup)
 #   HEALTH_TIMEOUT seconds to wait for container health  (default: 240)
+#   UNHEALTHY_GRACE seconds a container may report unhealthy before the deploy fails (default: 60)
 #   GIT_REMOTE_URL clone URL used by --bootstrap         (default: this repo's origin)
 #   PORT_WAIT_URL override the local URL probed by smoke (default: http://127.0.0.1:$HTTP_PORT)
 #   TAR_BIN       tar binary to use (default: tar — override if the host wraps tar)
@@ -42,6 +43,7 @@ ROLLBACK_IMAGE="${ROLLBACK_IMAGE:-webobsidian:rollback}"
 BACKUP_DIR="${BACKUP_DIR:-/root/backups}"
 BACKUP_KEEP="${BACKUP_KEEP:-1}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-240}"
+UNHEALTHY_GRACE="${UNHEALTHY_GRACE:-60}"
 TAR_BIN="${TAR_BIN:-tar}"
 GIT_REMOTE_URL="${GIT_REMOTE_URL:-$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null || true)}"
 
@@ -169,16 +171,30 @@ build_and_up() {
 }
 
 wait_healthy() {
-  local deadline=$(( $(date +%s) + HEALTH_TIMEOUT )) status=""
+  local deadline=$(( $(date +%s) + HEALTH_TIMEOUT )) status="" unhealthy_since=0
   local cid; cid="$(compose ps -q webobsidian 2>/dev/null || true)"
   [[ -n "$cid" ]] || die "no webobsidian container after 'up -d'"
   while :; do
     status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || echo unknown)"
     [[ "$status" == "healthy" ]] && { log "container healthy"; return 0; }
-    [[ "$status" == "exited" || "$status" == "dead" ]] && { compose logs --tail 40 webobsidian || true; die "container $status"; }
-    (( $(date +%s) > deadline )) && { compose logs --tail 40 webobsidian || true; return 1; }
+    [[ "$status" == "exited" || "$status" == "dead" ]] && { health_diag "$cid"; compose logs --tail 40 webobsidian || true; die "container $status"; }
+    # "unhealthy" means probes ran and failed: the server is up but not answering, so
+    # waiting out the full timeout only delays the rollback. Allow a grace window, then fail.
+    if [[ "$status" == "unhealthy" ]]; then
+      [[ "$unhealthy_since" == "0" ]] && unhealthy_since=$(date +%s)
+      if (( $(date +%s) - unhealthy_since > UNHEALTHY_GRACE )); then
+        health_diag "$cid"; compose logs --tail 40 webobsidian || true; return 1
+      fi
+    fi
+    (( $(date +%s) > deadline )) && { health_diag "$cid"; compose logs --tail 40 webobsidian || true; return 1; }
     sleep 3
   done
+}
+
+health_diag() { # last healthcheck results, so a failed deploy explains itself
+  log "health check log (last 5):"
+  docker inspect -f '{{range .State.Health.Log}}{{.End}} exit={{.ExitCode}} {{.Output}}{{end}}' "$1" 2>/dev/null \
+    | tail -5 | sed 's/^/[deploy]   /' || true
 }
 
 rollback() {
