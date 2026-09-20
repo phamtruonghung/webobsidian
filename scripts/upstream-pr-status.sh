@@ -15,12 +15,27 @@ set -uo pipefail
 
 UPSTREAM_REPO="${UPSTREAM_REPO:-xnohat/webobsidian}"
 UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/xnohat/webobsidian.git}"
-BRANCH="${BRANCH:-main}"
+# Default to the *remote-tracking* branch: on the deploy host the checkout is a detached
+# HEAD (the CI checkout of the deployed SHA) and a local `main` there is stale, which made
+# every merged PR look new. origin/main is right in both a working clone and a CI checkout.
+BRANCH="${BRANCH:-origin/main}"
 NEW_ONLY=0
 [[ "${1:-}" == "--new-only" ]] && NEW_ONLY=1
 
 REPO_DIR="$(git rev-parse --show-toplevel)"
 cd "$REPO_DIR"
+
+# Resolve the comparison ref: the requested one, else the remote-tracking main, else the
+# local main, else HEAD. A missing ref must never silently compare against nothing.
+if ! git rev-parse --verify --quiet "$BRANCH" >/dev/null; then
+  for cand in origin/main main HEAD; do
+    if git rev-parse --verify --quiet "$cand" >/dev/null; then
+      echo "warning: ref '$BRANCH' not found here, comparing against '$cand'" >&2
+      BRANCH="$cand"; break
+    fi
+  done
+fi
+git rev-parse --verify --quiet "$BRANCH" >/dev/null || { echo "ERROR: no ref to compare against" >&2; exit 2; }
 
 # The fork's own owner, so PRs opened from this fork can be told apart from third-party work.
 if [[ -z "${FORK_OWNER:-}" ]]; then
