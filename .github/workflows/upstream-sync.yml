@@ -21,6 +21,11 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       UPSTREAM_REPO: xnohat/webobsidian
+      # Pin gh to THIS repo. The status script adds a git remote named `upstream`
+      # (xnohat/webobsidian), and gh's repo inference prefers the parent-looking remote —
+      # without this, `gh issue create` tries to file the report on the upstream repo and
+      # fails with "could not add label" (it did, before this pin).
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,8 +63,9 @@ jobs:
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-sync --state open \
             --json number --jq '.[0].number // empty')"
           if [[ -n "$existing" ]]; then
-            gh issue comment "$existing" --body-file /tmp/body.md
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file /tmp/body.md
             echo "commented on #$existing"
           else
-            gh issue create --title "Upstream PR sync available" --label upstream-sync --body-file /tmp/body.md
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Upstream PR sync available" --label upstream-sync --body-file /tmp/body.md
           fi
