@@ -6,6 +6,22 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Docs — README now documents this fork's setup
+
+- New README section **§ This fork**: what the fork contains, where it runs, the deploy-on-merge
+  pipeline, **how to verify which build is live** (`GET /healthz` → `version` + `build`, image-id
+  comparison, the `Deploy (LXC 107)` run log) and the **upgrade notes** that matter when coming from
+  upstream `v0.1.1` (default password refused once a credential exists, `/auth/status` shape, the
+  `127.0.0.1` healthcheck replacing any local override, the build-arg identity, the new `packages/webo`
+  workspace, symlink behaviour).
+- Quick start clones *this* fork, checks `/healthz` and says why no healthcheck override is needed;
+  the shell-script table gained `npm test`, the `webo` CLI and `scripts/smoke-test.sh`.
+- Security notes and Contributing updated (default-password rule, `/auth/status`, `docs/agents/`,
+  "merging to `main` deploys itself — branch + PR, keep the smoke test green").
+- `desktop/README.md`: fork note that the auto-login secret means `123456` is never valid on the
+  desktop's loopback server, and that the bundled server carries the merged fixes.
+- `docs/DEPLOYMENT.md`: where the app test pages live (vault `Testing/`) and a pointer to the README.
+
 ### Build identity in `/healthz` — "which version is running?"
 
 - `GET /healthz` now returns `{"ok":true,"version":"<repo version>","build":"<git commit>"}`; the

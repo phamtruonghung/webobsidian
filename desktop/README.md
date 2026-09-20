@@ -15,6 +15,10 @@ the matching prebuilt Electron binary — no cross-compilation, no `node-gyp`.
 - App data (`settings.json`, search index) lives in Electron's per-user `userData` dir.
 - A random per-install password is generated, passed to the server as
   `WEBOBSIDIAN_PASSWORD`, and used to **auto-login** — no password prompt.
+  _Fork note:_ because that secret counts as configured, the well-known default `123456` is never
+  valid on the desktop's loopback server (auth hardening in this fork). The desktop **bundles the
+  server**, so it also carries every merged upstream PR listed in
+  [`docs/UPSTREAM_PR_MERGES.md`](../docs/UPSTREAM_PR_MERGES.md).
 - Menu **File → Switch Vault…** changes the vault (relaunches to re-index);
   **Open Vault/Data Folder** and **Open Logs** help debugging.
 - Git sync needs `git` on the machine; without it the app still works for local editing.

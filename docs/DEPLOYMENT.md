@@ -176,3 +176,15 @@ The first **automatic** deploy then ran on its own: merging the deployment PR (#
 green → `Deploy (LXC 107)` started on the self-hosted runner, synced the checkout to the merged commit
 `278f617`, took the rolling backup, kept the previous image as `webobsidian:rollback`, rebuilt, waited
 for `healthy`, passed all 5 smoke checks and logged `deploy OK: 278f617 is live`.
+
+### App test pages
+
+Click-through pages used to exercise the running app live **in the vault**, not the repo, so the
+production wiki and its lint stay untouched:
+
+- `Testing/webobsidian-fork-build.md` — what this build is, what's new, and a feature checklist
+  (preview tabs, themes, graph touch, English Account tab, rendering fixes).
+- `Testing/round-trip.md` — create/read/append check against the Agent API.
+
+The operator-facing version of these notes (upgrade caveats, verification commands) is in the
+repository README: [`§ This fork`](../README.md#-this-fork).
