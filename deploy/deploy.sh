@@ -22,6 +22,7 @@
 #   HEALTH_TIMEOUT seconds to wait for container health  (default: 240)
 #   GIT_REMOTE_URL clone URL used by --bootstrap         (default: this repo's origin)
 #   PORT_WAIT_URL override the local URL probed by smoke (default: http://127.0.0.1:$HTTP_PORT)
+#   TAR_BIN       tar binary to use (default: tar — override if the host wraps tar)
 #
 # The vault (a host bind mount) is never modified by a deploy: only /data (settings.json, uistate,
 # index) is snapshotted, and the previous image is kept as $ROLLBACK_IMAGE so a bad build can be
@@ -41,6 +42,7 @@ ROLLBACK_IMAGE="${ROLLBACK_IMAGE:-webobsidian:rollback}"
 BACKUP_DIR="${BACKUP_DIR:-/root/backups}"
 BACKUP_KEEP="${BACKUP_KEEP:-1}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-240}"
+TAR_BIN="${TAR_BIN:-tar}"
 GIT_REMOTE_URL="${GIT_REMOTE_URL:-$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null || true)}"
 
 MODE="deploy"
@@ -84,8 +86,10 @@ backup() {
   rm -rf "$out"; mkdir -p "$out"
 
   if [[ -d "$data_vol" ]]; then
-    tar czf "$out/data-$ts.tar.gz" -C "$data_vol" . || die "could not archive $data_vol"
-    log "  data: $(tar tzf "$out/data-$ts.tar.gz" | wc -l) entries"
+    # Dash-prefixed flags on purpose: some hosts wrap tar (e.g. a shim that inserts
+    # --no-same-owner), and `tar czf …` breaks through such a wrapper.
+    "$TAR_BIN" -c -z -f "$out/data-$ts.tar.gz" -C "$data_vol" . || die "could not archive $data_vol"
+    log "  data: $("$TAR_BIN" -t -z -f "$out/data-$ts.tar.gz" | wc -l) entries"
   else
     log "  data: volume dir $data_vol not present yet (first deploy)"
   fi
