@@ -24,9 +24,36 @@ echo "fetching upstream pull refs…" >&2
 git fetch --quiet upstream '+refs/pull/*/head:refs/remotes/upstream/pr/*' 2>/dev/null || \
   echo "warning: could not refresh upstream pull refs (using the ones already fetched)" >&2
 
-mapfile -t PRS < <(gh pr list --repo "$UPSTREAM_REPO" --state open --limit 200 \
-  --json number,title,author,createdAt \
-  --jq '.[] | "\(.number)\t\(.createdAt[0:10])\t@\(.author.login)\t\(.title)"' | sort -n)
+# Open PRs as "<number>\t<created YYYY-MM-DD>\t@<author>\t<title>", via the gh CLI when it is
+# available and the public REST API (curl + python3) otherwise — the deploy host has no gh.
+# Returns non-zero when the listing could not be produced, so a silent empty list can never be
+# mistaken for "upstream has no open PRs".
+list_open_prs() {
+  if command -v gh >/dev/null 2>&1; then
+    gh pr list --repo "$UPSTREAM_REPO" --state open --limit 200 \
+      --json number,title,author,createdAt \
+      --jq '.[] | "\(.number)\t\(.createdAt[0:10])\t@\(.author.login)\t\(.title)"' && return 0
+    echo "warning: gh pr list failed, falling back to the REST API" >&2
+  fi
+  local auth=()
+  [[ -n "${GITHUB_TOKEN:-}${GH_TOKEN:-}" ]] && auth=(-H "Authorization: Bearer ${GITHUB_TOKEN:-$GH_TOKEN}")
+  curl -fsS -m 30 "${auth[@]}" -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/$UPSTREAM_REPO/pulls?state=open&per_page=100&sort=created&direction=asc" \
+    | python3 -c '
+import json, sys
+for pr in json.load(sys.stdin):
+    number, created, author, title = pr["number"], pr["created_at"][:10], pr["user"]["login"], pr["title"]
+    print(number, created, "@" + author, title, sep="\t")
+' 2>/dev/null
+}
+
+prs_file="$(mktemp)"
+if ! list_open_prs > "$prs_file"; then
+  echo "ERROR: could not list open upstream PRs (no working gh, and the REST fallback failed)" >&2
+  rm -f "$prs_file"; exit 2
+fi
+mapfile -t PRS < <(sort -n "$prs_file")
+rm -f "$prs_file"
 [[ ${#PRS[@]} -gt 0 ]] || { echo "no open upstream PRs"; exit 0; }
 
 new_count=0
