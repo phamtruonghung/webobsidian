@@ -8,6 +8,15 @@ Cập nhật lần cuối: 2026-09-13 (FR-2 — preview tabs for note browsing)
 
 ---
 
+## Phase 14 — CLI Process Manager (`webo`) — FR-14
+- [x] M14.1 Workspace `packages/webo` khởi tạo với TypeScript + CLI entry (`bin.ts`)
+- [x] M14.2 Server graceful shutdown: thêm handler SIGTERM/SIGINT trong `server/src/index.ts` giải phóng HTTP, WebSocket, file watcher, và autosync
+- [x] M14.3 Implementing `webo` subcommands: `install`, `start`, `stop`, `restart`, `status`, `logs`, `config`, `uninstall`
+- [x] M14.4 Setup PID file (`~/.webobsidian/webo.pid`), log file (`webo.log`), và scaffold configuration (`~/.webobsidian/.env`)
+- [x] M14.5 Root package scripts (`npm run webo`) & documentation trong README.md / PRD.md / CHANGELOG.md
+
+---
+
 ## Phase 0 — Foundation & scaffolding
 - [x] M0.1 Khởi tạo monorepo (root `package.json` + workspaces)
 - [x] M0.2 Server scaffold: Express + TS, `tsconfig`, dev script (tsx), build (tsc)

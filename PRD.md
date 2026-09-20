@@ -5,6 +5,7 @@
 > Changelog 1.6 (FR-2 — Preview tabs, requested to reduce tab clutter while browsing): selecting a
 > note reuses one italicized preview tab. Double-clicking its tab title keeps it open. Editing a
 > preview or creating a note also keeps its tab open; preview state persists with the workspace.
+> Changelog 1.6 (FR-14 — Command-line process manager `webo`): bổ sung **FR-14** — CLI `webo` nằm trong workspace `packages/webo` quản lý tiến trình server WebObsidian dưới dạng background daemon (PID file + log file + graceful shutdown). Cung cấp các lệnh: `install`, `start`, `stop`, `restart`, `status`, `logs`, `config`, `uninstall`. Môi trường cấu hình lưu tập trung tại `~/.webobsidian/.env`.
 > Changelog 1.6 (FR-1 — symlink vault roots): hỗ trợ **symlink trong vault**: folder/file được trỏ qua
 > symlink được liệt kê và đọc/ghi bình thường kể cả khi trỏ ra ngoài vault root (miễn realpath nằm trong
 > `vault.allowedRoots`); cycle guard bằng `realpath` chống vòng lặp symlink.
