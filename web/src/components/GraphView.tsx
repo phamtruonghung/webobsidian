@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, type GraphSettings } from '../lib/store';
+import { resolveThemeColor } from '../lib/cssColor';
+import { THEME_SELECTOR } from '../lib/theme';
 import { api } from '../lib/api';
 import Icon from './Icon';
 import {
@@ -108,6 +110,7 @@ export default function GraphView() {
   const openFile = useStore((s) => s.openFile);
   const searchFor = useStore((s) => s.searchFor);
   const settings = useStore((s) => s.graphSettings);
+  const theme = useStore((s) => s.theme); // re-render + repaint when the theme changes
   const patch = useStore((s) => s.setGraphSettings);
   const reset = useStore((s) => s.resetGraphSettings);
 
@@ -178,9 +181,11 @@ export default function GraphView() {
   // ---- colour helpers -----------------------------------------------------
   const getCols = (): ColorSet => {
     const Color = mod.current!.Color;
-    const cs = getComputedStyle(document.querySelector('.theme-light, .theme-dark') || document.body);
+    // Theme-aware resolution: follows var() alias chains, normalises hsl()/calc() accents
+    // to rgb() and finds the themed root by *all* theme classes (see lib/cssColor.ts). The
+    // numeric fallback is kept for when the palette variable is genuinely missing.
     const toInt = (name: string, fb: number) => {
-      const v = cs.getPropertyValue(name).trim();
+      const v = resolveThemeColor(name);
       if (!v) return fb;
       try {
         return new Color(v).toNumber();
@@ -332,13 +337,18 @@ export default function GraphView() {
     fullDirty.current = false;
     updateLabels();
     p.app.render();
-    // debug/testing hook: expose the live camera (used by automated UI checks)
+    // debug/testing hook: expose the live camera + the resolved palette (used by automated
+    // UI checks — e.g. exercising the theme switch and asserting the label ink matches the
+    // active theme's --text-normal instead of eyeballing pixels).
     (window as unknown as { __graphCam?: object }).__graphCam = {
       k,
       x,
       y,
       target: zoomTarget.current,
       dev: devScale(k),
+      cols: p.cols,
+      labelFill: (p.labels[0]?.style as { fill?: number } | undefined)?.fill,
+      theme: (document.querySelector(THEME_SELECTOR) as HTMLElement | null)?.className ?? null,
     };
     if (zooming || fading) scheduleRender(false);
   };
@@ -488,9 +498,15 @@ export default function GraphView() {
       const t = ensureLabel(li++);
       if (t.text !== label) t.text = label;
       const isH = n === h;
-      if ((t as unknown as { _hv?: boolean })._hv !== isH) {
-        (t as unknown as { _hv?: boolean })._hv = isH;
-        t.style.fill = isH ? p.cols.accentHover : p.cols.textStrong;
+      // Keep the label ink in step with the active theme: a live theme switch must repaint
+      // text that is neither hovered nor newly created. Guarded so it rewrites only on change
+      // (and never re-rasterises a stable label), and `_hv`/fill are one condition so a
+      // hover-to-normal transition repaints too.
+      const wantFill = isH ? p.cols.accentHover : p.cols.textStrong;
+      const hv = t as unknown as { _hv?: boolean };
+      if (hv._hv !== isH || t.style.fill !== wantFill) {
+        hv._hv = isH;
+        t.style.fill = wantFill;
       }
       // Obsidian: labels live in world space with scale = nodeScale and font
       // size 14 + getSize()/4, i.e. they shrink with √zoom exactly like nodes;
@@ -571,8 +587,20 @@ export default function GraphView() {
       sp.tint = n === hover.current ? p.cols.accentHover : colorOf(n, p.cols);
       sp.scale.set(spriteScale(n, s, k));
     }
+    // Label ink tracks the palette (see updateLabels); edges are re-styled on the next pass.
+    edgesDirty.current = true;
+    fullDirty.current = true;
     scheduleRender(true);
   };
+
+  // The graph tab is restored from the saved workspace *before* App applies the saved theme,
+  // and the user can toggle the theme with the graph open. In both cases getCols() has stale
+  // ink (light-theme text on a dark canvas). Subscribe to the store's theme and repaint when
+  // it changes so the canvas always matches the app.
+  useEffect(() => {
+    applyDisplay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme]);
 
   // ---- init pixi (once) ---------------------------------------------------
   useEffect(() => {
@@ -655,7 +683,8 @@ export default function GraphView() {
         out.width = src.width;
         out.height = src.height;
         const ctx = out.getContext('2d')!;
-        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg-primary').trim() || '#ffffff';
+        // resolved theme bg, so a dark-theme screenshot is not pasted on white
+        ctx.fillStyle = '#' + p.cols.bg.toString(16).padStart(6, '0');
         ctx.fillRect(0, 0, out.width, out.height);
         ctx.drawImage(src, 0, 0);
         const blob = await new Promise<Blob | null>((res) => out.toBlob(res, 'image/png'));

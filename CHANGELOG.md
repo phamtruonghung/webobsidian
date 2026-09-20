@@ -6,6 +6,26 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Graph view paints correct theme colours (fixes dark-mode labels)
+
+- **Labels are no longer black in dark themes.** The canvas read its palette once at mount, so
+  text kept the light-theme ink when the graph tab was restored before the saved theme applied, or
+  when the theme was toggled with the graph open. Now the graph subscribes to the active theme and
+  repaints labels, node tints and edges on every change.
+- **Theme-colour resolution is done properly.** The graph reads palette variables through a
+  `resolveThemeColor` helper that follows `var()` alias chains and round-trips values through the
+  browser, so `hsl(...)`/`calc()` accents (Catppuccin) that Pixi's parser rejected now resolve
+  instead of silently using a hardcoded fallback. (Before, accent/accent-hover were always the
+  fallback colours — imperceptible on the Obsidian themes, wrong on Catppuccin.)
+- **Catppuccin themes are now found.** The themed root was looked up by `.theme-light, .theme-dark`,
+  missing the four `theme-ctp-*` classes and falling through to `body`, which cannot see the palette
+  vars — every colour became its fallback. The lookup now uses all theme classes (from `lib/theme.ts`).
+- Graph "Copy screenshot" now fills its background with the resolved theme `--bg-primary`, so a
+  dark-theme screenshot is no longer pasted on white.
+- The existing `window.__graphCam` debug hook got the resolved palette + live label fill, so an
+  automated UI check can assert ink-vs-background; new unit tests cover the colour resolver
+  (`web/tests/cssColor.test.ts`), and root `npm test` now runs every web test file (was only one).
+
 ### Agent API — safe read-modify-write, and an MCP server (adopted from other forks)
 
 - **Every read returns a `version`** (sha256 of the content — mtime-independent, so git autosync

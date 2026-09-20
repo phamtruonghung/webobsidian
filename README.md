@@ -277,6 +277,11 @@ Useful scripts:
 | `npm run mcp` | The bundled MCP server over stdio (needs `WEBOBSIDIAN_BASE_URL` + `WEBOBSIDIAN_API_KEY`) |
 | `scripts/smoke-test.sh` | Boot the built server five times and assert the fork's behaviour (auth hardening, symlinked vault, SIGTERM teardown, Agent API read-modify-write, MCP handshake) — run `npm run build` first |
 
+Canvas surfaces (the graph) must not read theme colours by hand: palette variables are aliases,
+some are `hsl()`/`calc()` values a strict parser rejects, and the themed root is not always
+`.theme-light/.theme-dark`. Use `resolveThemeColor` from `web/src/lib/cssColor.ts` and repaint when
+the store's theme changes.
+
 The server suite covers the vault write/trash/path-safety paths, git autosync and a real-git
 integration run (a throwaway repo + bare remote, no network); the web suite covers the workspace
 store, including preview-tab state. CI (`.github/workflows/ci.yml`) runs typecheck, tests, the smoke
