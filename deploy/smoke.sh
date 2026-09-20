@@ -55,9 +55,17 @@ login() { # login <password> -> "<code> <mustChangePassword|absent>"
 
 echo "smoke: $BASE (env: $ENV_FILE)"
 
-# 1. liveness
+# 1. liveness — /healthz also reports the built-in version and the commit the image was built
+# from, so this doubles as "is the deployment actually running the build we just shipped?".
 read -r code body < <(http GET /healthz)
-chk "GET /healthz returns ok" "200 {\"ok\":true}" "$code $body"
+hb="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("version","?"), d.get("build","?"), "ok" if d.get("ok") else "not-ok")' 2>/dev/null || echo "? ? unparseable")"
+read -r h_version h_build h_ok <<<"$hb"
+chk "GET /healthz returns ok" "ok" "$h_ok"
+if [[ -n "${EXPECT_BUILD:-}" ]]; then
+  chk "running build is the deployed commit" "$EXPECT_BUILD" "$h_build"
+else
+  echo "  INFO  running build: version=$h_version build=$h_build"
+fi
 
 # 2. the SPA is served
 body="$(curl -s -m 15 "$BASE/" | tr -d '\n' | head -c 4000)"
