@@ -1,7 +1,8 @@
 services:
   webobsidian:
     build: .
-    image: webobsidian:latest
+    # WO_IMAGE lets deploy.sh control the tag it builds, tags for rollback and runs.
+    image: ${WO_IMAGE:-webobsidian:latest}
     container_name: webobsidian
     restart: unless-stopped
     ports:

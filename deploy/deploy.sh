@@ -61,7 +61,7 @@ env_get() { # env_get KEY  -> value from ENV_FILE (empty when unset)
   sed -n "s/^[[:space:]]*$1=//p" "$ENV_FILE" | tail -1 | sed 's/^["'"'"']//; s/["'"'"']$//'
 }
 
-compose() { docker compose -f "$DEPLOY_DIR/docker-compose.yml" --env-file "$ENV_FILE" -p "$PROJECT" "$@"; }
+compose() { WO_IMAGE="$IMAGE" docker compose -f "$DEPLOY_DIR/docker-compose.yml" --env-file "$ENV_FILE" -p "$PROJECT" "$@"; }
 
 # ── backup ───────────────────────────────────────────────────────────────────────────────────────
 # One rolling backup (BACKUP_KEEP=1 by default, keep-it-lean): the /data volume contents, a manifest
