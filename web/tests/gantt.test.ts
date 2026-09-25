@@ -8,8 +8,13 @@ import {
   barsFor,
   computeRange,
   DAY_MS,
+  dayGridlines,
   dayToISO,
+  dayToShort,
   EMPTY_RANGE_HALF_DAYS,
+  isWeekend,
+  monthLabel,
+  monthSpans,
   isRealDate,
   MIN_BAR_PX,
   PAD_DAYS,
@@ -17,6 +22,7 @@ import {
   rangeDays,
   sortBars,
   ticksFor,
+  weekendSpans,
   todayX,
   xForDay,
   zoomLevel,
@@ -185,6 +191,71 @@ test('sortBars orders by start, then latest due, then title', () => {
   );
 });
 
+test('short date labels read as dates, not codes', () => {
+  assert.equal(dayToShort(parseDay('2026-09-28')!), 'Sep 28');
+  assert.equal(dayToShort(parseDay('2026-10-05')!), 'Oct 5');
+  assert.equal(monthLabel(parseDay('2026-09-28')!), 'September 2026');
+  assert.equal(monthLabel(parseDay('2026-10-01')!), 'October 2026');
+});
+
+test('weekends are Saturday and Sunday', () => {
+  assert.equal(isWeekend(parseDay('2026-09-26')!), true); // Sat
+  assert.equal(isWeekend(parseDay('2026-09-27')!), true); // Sun
+  assert.equal(isWeekend(parseDay('2026-09-25')!), false); // Fri
+  assert.equal(isWeekend(parseDay('2026-09-28')!), false); // Mon
+});
+
+test('weekend spans merge Sat+Sun and carry padded offsets', () => {
+  const r = { from: parseDay('2026-09-25')!, to: parseDay('2026-10-06')! };
+  const px = 16;
+  const spans = weekendSpans(r, px);
+  assert.equal(spans.length, 2, 'two weekends in this range');
+  assert.deepEqual(spans.map((s) => dayToISO(s.from)), ['2026-09-26', '2026-10-03']);
+  assert.deepEqual(spans.map((s) => dayToISO(s.to)), ['2026-09-27', '2026-10-04']);
+  assert.equal(spans[0].x, (parseDay('2026-09-26')! - r.from) * px);
+  assert.equal(spans[0].width, 2 * px, 'Saturday + Sunday are one block');
+  assert.ok(spans.every((s) => s.x >= 0 && s.x + s.width <= rangeDays(r) * px));
+});
+
+test('weekend spans never run past the end of the range', () => {
+  const r = { from: parseDay('2026-09-28')!, to: parseDay('2026-10-03')! }; // Mon → Sat (open-ended)
+  const spans = weekendSpans(r, 10);
+  assert.deepEqual(spans.map((s) => dayToISO(s.from)), ['2026-10-03']);
+  assert.equal(spans[0].width, 1 * 10, 'a lone Saturday is one day wide');
+});
+
+test('month spans tile the range exactly, in order, with labels', () => {
+  const r = { from: parseDay('2026-09-25')!, to: parseDay('2026-10-06')! };
+  const spans = monthSpans(r, 16);
+  assert.deepEqual(spans.map((s) => s.label), ['September 2026', 'October 2026']);
+  assert.equal(dayToISO(spans[0].from), '2026-09-25');
+  assert.equal(dayToISO(spans[0].to), '2026-09-30');
+  assert.equal(dayToISO(spans[1].from), '2026-10-01');
+  assert.equal(dayToISO(spans[1].to), '2026-10-06');
+  assert.equal(spans[0].x, 0);
+  assert.equal(spans[1].x, spans[0].width, 'the bands tile without a gap');
+  const total = spans.reduce((n, s) => n + s.width, 0);
+  assert.equal(total, rangeDays(r) * 16, 'bands cover the whole axis');
+});
+
+test('a range inside one month yields a single band', () => {
+  const r = { from: parseDay('2026-09-10')!, to: parseDay('2026-09-20')! };
+  const spans = monthSpans(r, 4);
+  assert.equal(spans.length, 1);
+  assert.equal(spans[0].label, 'September 2026');
+  assert.equal(spans[0].width, rangeDays(r) * 4);
+});
+
+test('day hairlines cover every day when there is room, and none when there is not', () => {
+  const r = { from: parseDay('2026-09-25')!, to: parseDay('2026-10-06')! };
+  const lines = dayGridlines(r, 16);
+  assert.equal(lines.length, rangeDays(r), 'one hairline per day');
+  assert.equal(lines[0].x, 0);
+  assert.equal(lines[1].x, 16);
+  assert.deepEqual(dayGridlines(r, 8), [], 'too dense — no hairlines');
+  assert.equal(dayGridlines(r, 12).length, rangeDays(r), 'the threshold is inclusive');
+});
+
 test('day zoom labels every day and majors on Mondays', () => {
   const r = { from: parseDay('2026-09-28')!, to: parseDay('2026-10-04')! }; // Mon → Sun
   const px = zoomLevel('day').pxPerDay;
@@ -194,7 +265,7 @@ test('day zoom labels every day and majors on Mondays', () => {
   assert.equal(ticks[1].x, px, 'gridlines are one pxPerDay apart');
   // 2026-09-28 is a Monday.
   assert.equal(ticks[0].major, true);
-  assert.match(ticks[0].label!, /^09-28$/);
+  assert.equal(ticks[0].label, 'Sep 28', 'a Monday reads as a date');
   assert.equal(ticks[2].major, false);
   assert.equal(ticks[2].label, '30');
 });
@@ -207,6 +278,7 @@ test('week zoom labels Mondays only, month zoom labels the first of each month',
     ['2026-09-28', '2026-10-05'],
     'Mondays inside the range',
   );
+  assert.deepEqual(week.map((t) => t.label), ['Sep 28', 'Oct 5']);
   assert.ok(week.every((t) => t.major && t.label));
 
   const month = ticksFor(r, 'month', zoomLevel('month').pxPerDay);

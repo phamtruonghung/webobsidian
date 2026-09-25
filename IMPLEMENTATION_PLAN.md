@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-25 (FR-16 — Tasks view: Timeline/Gantt, issue #32; kèm kiểm chứng deploy của FR-15)
+Cập nhật lần cuối: 2026-09-25 (FR-16 — Timeline/Gantt: restyle giao diện theo phản hồi "too ugly", issue #35)
 
 ---
 
@@ -553,11 +553,40 @@ Cập nhật lần cuối: 2026-09-25 (FR-16 — Tasks view: Timeline/Gantt, iss
       so **hình học từng thanh với kỳ vọng tính độc lập bằng Python** từ frontmatter (10/10 khớp), đường
       hôm nay, nhãn trục, 3 mức zoom, lớp overdue/open-ended/unknown, click thanh + nhãn mở note, toggle,
       reload giữ timeline, cuộn ngang ở 390px, không lỗi console — 22/22 PASS.
-- [ ] M35.6 Kiểm chứng deploy: sau merge, LXC 107 `/healthz.build` == merge commit và `/tasks?mode=timeline`
-      được phục vụ từ build đó (paste curl output) — theo runbook docs/DEPLOYMENT.md.
+- [x] M35.6 Kiểm chứng deploy: sau merge `5b59ac0`, CI xanh → `Deploy (LXC 107)` success; `curl /healthz`
+      → `build=5b59ac0`, `/tasks?mode=timeline` HTTP 200, bundle deploy chứa `gantt-bar`/`gantt-day-w`/
+      `mode=timeline`; `GET /api/v1/tasks` (key scope `read`) trả 6 task thật của vault — comment trên issue #32.
 - [ ] M35.7 Người dùng kiểm tra bằng mắt trên deployment thật (kéo thả của FR-15 + Timeline của FR-16).
+- [x] M35.8 Dải tháng + tick tuần/ngày/tháng, nhãn ngày dạng `Sep 28`; helper thuần `dayToShort`,
+      `monthLabel`, `isWeekend`, `weekendSpans`, `monthSpans`, `dayGridlines` + unit test.
+- [x] M35.9 Lưới phân cấp (hairline ngày / đường tuần / đường tháng 2px) thay cho gradient mỗi ngày;
+      nền cuối tuần; hôm nay = dải + đường + nhãn `Today`; cột nhãn sticky có bóng đổ.
+- [x] M35.10 Thanh: chip priority, tên task trong thanh khi đủ rộng, mờ dần khi mở, viền+sọc khi quá
+      hạn, focus-visible; cột nhãn nêu **tên trạng thái bằng chữ**; đo tương phản ≥ 4.5:1 cả hai theme.
+- [x] M35.11 Compact ≤640px: cột nhãn 132px, meta rút gọn, ẩn tên task trong thanh.
+- [x] M35.12 Sửa bug auto-scroll "về hôm nay" (kẹp về 0 lúc chưa có task, `lineX` cũ) — effect phụ
+      thuộc `[lineX, pxPerDay]`, observe container **và** grid, nhường người dùng khi họ tự cuộn/đổi
+      zoom; test DOM khẳng định đường hôm nay phải **nằm trong vùng nhìn thấy**.
 
 ### Nhật ký tiến độ
+- 2026-09-25 (FR-16 — Timeline/Gantt restyle, issue #35): người dùng báo "gantt chart UI too ugly".
+  Thay vì đoán, **chụp ảnh bằng headless Chromium** (light/dark/mobile) rồi **soi từng ảnh** để chấm
+  thiết kế — vòng lặp: chụp → nhận xét → sửa → chụp lại. Vấn đề xác nhận được: lưới là "sương mù"
+  gradient mỗi ngày (không đọc được tỉ lệ), trục 1 tầng nhãn `09-28`, thanh phẳng chữ chật, quá hạn chỉ
+  có viền mảnh, trạng thái chỉ dựa vào màu, không có nhịp ngang cho hàng. Đã làm: trục 2 tầng (dải
+  tháng + tick), nhãn `Sep 28`, nền cuối tuần, lưới phân cấp 3 mức, thanh bo góc + chip priority + tên
+  task trong thanh, bar mở mờ dần, quá hạn viền + sọc, nhãn `Today` trên dải hôm nay, cột nhãn có
+  bóng đổ và **nêu trạng thái bằng chữ**, compact ≤640px (cột nhãn 132px, meta rút gọn, ẩn tên task
+  trong thanh). **Bug thật do kiểm chứng bắt được**: `scrollToToday()` chạy lúc `tasks` còn rỗng →
+  dải 31 ngày vừa khung nên `scrollLeft` kẹp về 0, và callback giữ `lineX` cũ → **đường hôm nay nằm
+  ngoài màn hình** (ảnh chụp nói đúng, test cũ nói sai vì chỉ so `offsetLeft`). Sửa: effect phụ thuộc
+  `[lineX, pxPerDay]`, observe container **và** grid, nhường người dùng khi họ tự cuộn/đổi zoom; test
+  DOM mới khẳng định đường hôm nay phải **trong vùng nhìn thấy** + có tự cuộn. **Kiểm chứng**: `npm test`
+  143 server + 90 web (23 test thuần cho helper mới + 6 test DOM mới); typecheck + build xanh; headless
+  DOM **32/32 PASS** (hình học từng thanh vẫn khớp kỳ vọng Python độc lập; thêm kiểm tra dải tháng, nền
+  cuối tuần, nhãn Today, dải hôm nay, hairline ngày, trạng thái bằng chữ, cuộn ngang 390px); tương
+  phản chữ/thanh đo được thấp nhất **4.70:1** (≥4.5:1 ở cả hai theme). M35.8–M35.12 `[x]`; M35.6 (deploy
+  của #32) cũng đã tick; M35.7 chờ người dùng nhìn bằng mắt trên deployment thật.
 - 2026-09-25 (FR-16 — Tasks view: Timeline/Gantt, issue #32): **Phase 35**. Bối cảnh: phiên Claude Code
   (opus) hết hạn mức giữa lúc lập plan nên phần code do agent dự phòng làm tiếp, nhánh
   `feat/tasks-gantt-timeline` từ `main` (đã có FR-15). Quyết định khung (ghi ở PRD FR-16): thanh
