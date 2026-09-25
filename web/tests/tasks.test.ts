@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, mock, test } from 'node:test';
 import { api, ApiError, type TaskRecord } from '../src/lib/api';
 import {
+  changeTaskDue,
   changeTaskStatus,
   DEFAULT_HIDDEN_STATUSES,
   filterByStatus,
@@ -11,9 +12,11 @@ import {
   columnsFor,
   isMissingStatus,
   isOverdue,
+  isUndated,
   moveTask,
   normaliseStatus,
   restoreTask,
+  setTaskDue,
   setTaskStatus,
   todayISO,
 } from '../src/lib/tasks';
@@ -191,6 +194,86 @@ test('isOverdue', () => {
   assert.equal(isOverdue(task({ due: 'none', status: 'open' }), '2026-09-25'), false);
   assert.equal(isOverdue(task({ due: null, status: 'open' }), '2026-09-25'), false);
   assert.equal(isOverdue(task({ due: '2026-01-01', status: 'done' }), '2026-09-25'), false);
+});
+
+// ---- setTaskDue / changeTaskDue / isUndated (#41) ----
+
+test('setTaskDue replaces an existing due: line and bumps updated:', () => {
+  const src = '---\ntitle: T\ntype: task\nstatus: open\ndue: 2026-09-01\nupdated: 2026-09-01\n---\nBody\n';
+  assert.equal(
+    setTaskDue(src, '2026-10-05', '2026-09-25'),
+    '---\ntitle: T\ntype: task\nstatus: open\ndue: 2026-10-05\nupdated: 2026-09-25\n---\nBody\n',
+  );
+});
+
+test('setTaskDue inserts due after the type: block when the key is absent', () => {
+  const src = '---\ntitle: T\ntype: task\nstatus: open\nupdated: 2026-09-01\n---\nBody\n';
+  assert.equal(
+    setTaskDue(src, '2026-10-05', '2026-09-25'),
+    '---\ntitle: T\ntype: task\ndue: 2026-10-05\nstatus: open\nupdated: 2026-09-25\n---\nBody\n',
+  );
+});
+
+test('setTaskDue writes none unquoted, to clear a date the way the vault expects', () => {
+  const src = '---\ntype: task\ndue: 2026-10-05\nupdated: 2026-09-01\n---\nBody\n';
+  const out = setTaskDue(src, 'none', '2026-09-25');
+  assert.match(out, /^due: none$/m);
+  assert.ok(!out.includes('"none"'), 'a bare word, matching the vault convention');
+});
+
+test('setTaskDue creates a frontmatter block when the note has none', () => {
+  assert.equal(
+    setTaskDue('Body only\n', '2026-10-05', '2026-09-25'),
+    '---\ndue: 2026-10-05\nupdated: 2026-09-25\n---\nBody only\n',
+  );
+});
+
+test('setTaskDue leaves the body, key order, CRLF endings and a BOM untouched', () => {
+  const src = '\uFEFF---\r\ntype: task\r\ndue: none\r\nupdated: 2026-09-01\r\n---\r\n# Body\r\n\r\ntext\r\n';
+  const out = setTaskDue(src, '2026-10-05', '2026-09-25');
+  assert.equal(
+    out,
+    '\uFEFF---\r\ntype: task\r\ndue: 2026-10-05\r\nupdated: 2026-09-25\r\n---\r\n# Body\r\n\r\ntext\r\n',
+  );
+  assert.ok(out.startsWith('\uFEFF'), 'BOM kept');
+  assert.ok(!/(?<!\r)\n/.test(out), 'no bare LF introduced');
+});
+
+test('setTaskStatus and setTaskDue share one surgery, so status writes are unchanged', () => {
+  // Guards the refactor: the status write-back must still behave exactly as the
+  // tests above (from FR-15) assert.
+  const src = '---\ntype: task\nstatus: open\nupdated: 2026-09-01\n---\nBody\n';
+  assert.equal(
+    setTaskStatus(src, 'blocked', '2026-09-25'),
+    '---\ntype: task\nstatus: blocked\nupdated: 2026-09-25\n---\nBody\n',
+  );
+});
+
+test('isUndated is true for a missing, empty or "none" due, false for a real date', () => {
+  assert.equal(isUndated(task({ due: null })), true);
+  assert.equal(isUndated(task({ due: 'none' })), true);
+  assert.equal(isUndated(task({ due: 'asap' })), true);
+  assert.equal(isUndated(task({ due: '2026-10-05' })), false);
+});
+
+test('changeTaskDue reads, rewrites the due date, and writes back with the read version', async () => {
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  await changeTaskDue('Task.md', '2026-10-05', { today: '2026-09-25' });
+  assert.deepEqual(writes.mock.calls[0].arguments, [
+    'Task.md',
+    '---\ntype: task\ndue: 2026-10-05\nstatus: open\nupdated: 2026-09-25\n---\nBody\n',
+    'v1',
+  ]);
+});
+
+test('changeTaskDue propagates a 409 version conflict from api.write', async () => {
+  mock.method(api, 'write', async () => {
+    throw new ApiError('version_conflict', 409);
+  });
+  await assert.rejects(
+    changeTaskDue('Task.md', '2026-10-05', { today: '2026-09-25' }),
+    (e: unknown) => e instanceof ApiError && e.status === 409,
+  );
 });
 
 // ---- moveTask ----

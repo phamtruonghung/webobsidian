@@ -589,26 +589,45 @@ Cập nhật lần cuối: 2026-09-26 (FR-17 — Tạo note từ template: hết
       Done → 10 thanh, tắt → 9; cột Done rỗng với `+1 hidden`; hình học thanh vẫn khớp kỳ vọng Python
       (9/9); 51/51 check PASS.
 
-## Phase 37 — Tạo note từ template (New note from template) — FR-17 (issue #42)
-- [x] M37.1 `web/src/lib/templates.ts` (thuần, không DOM/không server): `slugify` (bỏ dấu tiếng Việt
+## Phase 37 — Tasks view: đặt hạn từ board/timeline + quy ước `due` — FR-15 (issue #41)
+- [x] M37.1 `web/src/lib/tasks.ts`: tách phép ghi frontmatter dùng chung `writeFrontmatterKeys` (một chỗ lo
+      BOM/CRLF/thứ tự key), `setTaskStatus`/`setTaskDue` chỉ còn khai báo key; thêm `isUndated`,
+      `changeTaskDue` (CAS). 9 unit test mới (thay/thêm dòng `due`, `none` không bị quote, tạo frontmatter,
+      giữ CRLF+BOM, và một test khoá hành vi `setTaskStatus` sau refactor).
+- [x] M37.2 Nút hạn trên thẻ (caret ▾, editor tại chỗ) + menu `⋯` "Set due date…"/"Clear due date" +
+      control tương tự ở cột nhãn timeline (`.gantt-label-cell` tách khỏi nút tiêu đề để không lồng button);
+      optimistic + rollback + notify.
+- [x] M37.3 Chip "Needs a due date" (đếm theo tập đang hiện) + bộ lọc chỉ-hiện-task-chưa-hạn.
+- [x] M37.4 Vault: `Wiki/templates/task.md` (`due: YYYY-MM-DD` + quy ước), `Wiki/SCHEMA.md` (`due` bắt
+      buộc, `none` là ngoại lệ cố ý, hạn đặt từ board); bump `updated` cả hai. Patch skill
+      `document-to-action-items` + `meeting-action-items`: giữ nguyên "không bịa ngày", thêm yêu cầu
+      *quyết định* ngày — không có ngày thì ghi `due: none` để hiện ở "Needs a due date".
+- [x] M37.5 Kiểm chứng headless 63/63 PASS, gồm 12 check cho hạn: đặt hạn từ thẻ → **đọc file trên đĩa**
+      xác nhận đúng dòng `due:` được ghi và chỉ `due:`/`updated:` đổi; chip đếm 3 → 2; lọc undated;
+      timeline có chip "no due" bấm được; Esc không ghi; Clear trả về `due: none`. Hai bug thật do kiểm
+      chứng bắt: (a) `showPicker()` nuốt phím Enter (bỏ); (b) click **Clear** làm input blur → commit →
+      editor unmount trước khi click tới nơi (sửa: blur chỉ commit khi focus rời khỏi editor).
+
+## Phase 38 — Tạo note từ template (New note from template) — FR-17 (issue #42)
+- [x] M38.1 `web/src/lib/templates.ts` (thuần, không DOM/không server): `slugify` (bỏ dấu tiếng Việt
       gồm cả `đ`/`Đ`, gom ký tự lạ thành `-`, cắt 60 ký tự), `substituteTemplate` (`{{title}}`,
       `{{date}}`, `{{time}}`, `{{slug}}` + dạng chữ `YYYY-MM-DD-slug` xử lý **trước** `YYYY-MM-DD`),
       `findTemplatesFolder` (BFS, thư mục nông nhất tên `templates`), `listTemplates`,
       `targetCandidates` / `resolveTargetFolder` (`+s`, giữ nguyên tên, `y`→`ies`, `+es`, đoạn cuối sau
       gạch), `uniqueNotePath` (`-2`, `-3`…). 16 unit test trong `web/tests/templates.test.ts`.
-- [x] M37.2 Store: `templatePicker` + `setTemplatePicker`; action `newFromTemplate(templatePath, title,
+- [x] M38.2 Store: `templatePicker` + `setTemplatePicker`; action `newFromTemplate(templatePath, title,
       folder)` đọc template bằng `api.read`, ghi **create-only** (`baseVersion: ''`) và nhảy hậu tố khi
       409, mở note, trả về path; từ chối title không ra slug và thư mục không tồn tại (không ghi gì).
       6 test trong `web/tests/store.test.ts`.
-- [x] M37.3 UI: `web/src/components/TemplatePicker.tsx` (lọc template, Title, Folder luôn sửa được, dòng
+- [x] M38.3 UI: `web/src/components/TemplatePicker.tsx` (lọc template, Title, Folder luôn sửa được, dòng
       `Creates <path>` hiện trước khi ghi, lỗi hiện trong modal), nút ribbon `file-plus`, mục command
       palette "New note from template", CSS `.tpl-*` trong `obsidian.css`.
-- [x] M37.4 Kiểm chứng: `npm test` **118 web + server** PASS; `npm run typecheck` (4 workspace) PASS;
+- [x] M38.4 Kiểm chứng: `npm test` **143 server + 127 web** PASS; `npm run typecheck` (4 workspace) PASS;
       `npm run build` PASS; **headless Chromium trên bản COPY của vault thật**: modal liệt kê đủ 9
       template, `meeting` → `Wiki/meetings`, tên dự đoán khớp file thật, note mở thành tab active, tên
       trùng → `-2` (file đầu không đổi), thư mục sai → "Folder not found" và không tạo thư mục; **0
       request lỗi, 0 pageerror/console error**; `deploy/smoke.sh` **7/7 PASS** trên server local.
-- [~] M37.5 PR + merge (merge commit) → chứng minh deploy: `/healthz` `build` == commit merge, bundle đã
+- [~] M38.5 PR + merge (merge commit) → chứng minh deploy: `/healthz` `build` == commit merge, bundle đã
       deploy chứa chuỗi marker mới.
 
 ### Nhật ký tiến độ
@@ -620,12 +639,22 @@ Cập nhật lần cuối: 2026-09-26 (FR-17 — Tạo note từ template: hết
   lệnh dùng chung** cho mọi template, thư mục template tự dò, thư mục đích suy từ tên template và **hiện
   trước khi ghi**, placeholder thay cả dạng chữ vault đang dùng (nên không phải migrate template), tên
   trùng thì `-2` và **không bao giờ ghi đè**, thư mục thiếu thì báo lỗi chứ không tự tạo. **Kiểm chứng**:
-  `npm test` 118 web PASS (+16 template, +6 store), typecheck 4 workspace PASS, build PASS, headless
+  `npm test` 143 server + 127 web PASS (+16 template, +6 store), typecheck 4 workspace PASS, build PASS, headless
   Chromium trên bản copy vault thật PASS toàn bộ (9 template liệt kê đúng, `meeting`→`Wiki/meetings`,
   `sources: [raw/meetings/2026-09-26-qms-review-with-ban-and-chien.md]` — token ghép không để lại `-slug`,
   trùng tên → `-2` mà file đầu nguyên vẹn, thư mục sai → "Folder not found"), `deploy/smoke.sh` 7/7. Phát
   hiện phụ khi kiểm chứng: restore workspace state của app gây **500** khi tab cũ trỏ vào file đã bị xoá
   trên đĩa (lỗi có sẵn, không liên quan FR-17) — ghi lại để xử lý riêng.
+- 2026-09-26 (FR-15 — Tasks view: đặt hạn từ board/timeline, issue #41): người dùng hỏi vì sao nhiều task
+  không có hạn và làm sao thêm — 5/9 note `due: none`. Chọn hướng "làm chức năng" + sửa template. Quyết
+  định (PRD FR-15): badge hạn thành control mở `<input type="date">` tại chỗ, menu `⋯` có "Set due date…";
+  ghi bằng `setTaskDue` (tách chung một hàm phẫu thuật frontmatter với `setTaskStatus`), CAS `baseVersion`;
+  chip "Needs a due date" lọc task chưa hạn; template đổi sang `due: YYYY-MM-DD` + quy ước, SCHEMA nói
+  `due` bắt buộc và `none` là ngoại lệ cố ý; skill trích xuất action-item vẫn **không bịa ngày** nhưng phải
+  ghi `due: none` để việc thiếu hạn hiện ra thay vì im lặng. **Kiểm chứng**: `npm test` 143 server + 105
+  web (9 test mới); typecheck + build xanh; headless **63/63 PASS** — trong đó 12 check đọc thẳng file
+  trong vault để chứng minh chỉ `due:`/`updated:` đổi; template + SCHEMA đã ghi vào vault thật và đọc lại
+  xác nhận. M37.1–M37.5 `[x]`.
 - 2026-09-25 (FR-15 — Tasks view: lọc theo trạng thái, mặc định ẩn Done, issue #39): người dùng yêu cầu
   thêm chức năng lọc theo trạng thái và mặc định không hiện Done. Quyết định khung (ghi ở PRD FR-15):
   chip theo trạng thái kèm số thẻ ở hàng riêng; mặc định chỉ ẩn `done`, giá trị lạ vẫn hiện; **cột Done

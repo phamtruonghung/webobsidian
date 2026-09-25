@@ -188,6 +188,11 @@ export function restoreTask(tasks: TaskRecord[], previous: TaskRecord): TaskReco
   return tasks.map((t) => (t.path === previous.path ? previous : t));
 }
 
+/** True iff the note has no usable date on `due` (absent, empty, or the vault's `none`). */
+export function isUndated(task: TaskRecord): boolean {
+  return !task.due || !DUE_RE.test(task.due);
+}
+
 /** Local-date YYYY-MM-DD (not UTC — matches what a human sees on their clock). */
 export function todayISO(d: Date = new Date()): string {
   const y = d.getFullYear();
@@ -241,17 +246,23 @@ function upsertTopLevelKey(frontLines: string[], key: string, value: string, aft
   return [...frontLines, newLine];
 }
 
-/**
- * Write-back for a status change, computed purely from the note's current text.
- * Preserves the file's line ending, BOM, key order, every other line, and the body.
- */
 // A frontmatter delimiter line may carry trailing whitespace (some editors
 // leave it); the opening fence is always `---`, the closing one `---` or `...`.
 const OPEN_DELIM_RE = /^---[ \t]*$/;
 const CLOSE_DELIM_RE = /^(---|\.\.\.)[ \t]*$/;
 
-export function setTaskStatus(content: string, status: string, today: string): string {
-  const bom = content.startsWith('﻿') ? '﻿' : '';
+/**
+ * Frontmatter surgery shared by every write-back the Tasks view does: set each
+ * key (replacing its line, or inserting it after `afterKey`, else at the end of
+ * the block), bump `updated`, and leave every other byte of the note alone —
+ * line endings, BOM, key order and body included.
+ */
+function writeFrontmatterKeys(
+  content: string,
+  keys: { key: string; value: string; afterKey?: string }[],
+  today: string,
+): string {
+  const bom = content.startsWith('\uFEFF') ? '\uFEFF' : '';
   const body = bom ? content.slice(1) : content;
   const eol = body.includes('\r\n') ? '\r\n' : '\n';
   const lines = body.split(eol);
@@ -259,8 +270,8 @@ export function setTaskStatus(content: string, status: string, today: string): s
   const hasOpenDelim = OPEN_DELIM_RE.test(lines[0]);
   const closeIdx = hasOpenDelim ? lines.findIndex((l, i) => i > 0 && CLOSE_DELIM_RE.test(l)) : -1;
   if (!hasOpenDelim || closeIdx === -1) {
-    const block = `---${eol}status: ${serializeValue(status)}${eol}updated: ${serializeValue(today)}${eol}---${eol}`;
-    return bom + block + body;
+    const pairs = [...keys.map((k) => `${k.key}: ${serializeValue(k.value)}`), `updated: ${serializeValue(today)}`];
+    return `${bom}---${eol}${pairs.join(eol)}${eol}---${eol}${body}`;
   }
 
   const openLine = lines[0];
@@ -268,10 +279,24 @@ export function setTaskStatus(content: string, status: string, today: string): s
   let frontLines = lines.slice(1, closeIdx);
   const rest = lines.slice(closeIdx + 1);
 
-  frontLines = upsertTopLevelKey(frontLines, 'status', status, 'type');
+  for (const k of keys) frontLines = upsertTopLevelKey(frontLines, k.key, k.value, k.afterKey);
   frontLines = upsertTopLevelKey(frontLines, 'updated', today);
 
   return bom + [openLine, ...frontLines, closeLine, ...rest].join(eol);
+}
+
+/** Status write-back (FR-15) — computed purely from the note's current text. */
+export function setTaskStatus(content: string, status: string, today: string): string {
+  return writeFrontmatterKeys(content, [{ key: 'status', value: status, afterKey: 'type' }], today);
+}
+
+/**
+ * Due-date write-back (FR-15 / #41): `due` is a `YYYY-MM-DD` date, or `none` to
+ * clear it. Same guarantees as setTaskStatus — only the `due:` and `updated:`
+ * lines change, everything else is byte-identical.
+ */
+export function setTaskDue(content: string, due: string, today: string): string {
+  return writeFrontmatterKeys(content, [{ key: 'due', value: due, afterKey: 'type' }], today);
 }
 
 /**
@@ -287,4 +312,19 @@ export async function changeTaskStatus(
   const today = deps.today ?? todayISO();
   const r = await api.read(path);
   await api.write(path, setTaskStatus(r.content, status, today), r.version);
+}
+
+/**
+ * Full due-date-change flow, twin of changeTaskStatus: read the note, rewrite
+ * `due`/`updated`, write it back CAS-guarded by the version just read. `due` is
+ * a `YYYY-MM-DD` date or `none` to clear it.
+ */
+export async function changeTaskDue(
+  path: string,
+  due: string,
+  deps: { today?: string } = {},
+): Promise<void> {
+  const today = deps.today ?? todayISO();
+  const r = await api.read(path);
+  await api.write(path, setTaskDue(r.content, due, today), r.version);
 }

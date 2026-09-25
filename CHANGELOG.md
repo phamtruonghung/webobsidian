@@ -45,6 +45,19 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   the `open` bar is lifted on dark themes. *(issue #35)*
 
 ### Added
+- **Set a due date from the board or the timeline.** The due badge on a card is a control now: click it
+  and it turns into a date field (Enter saves, Escape cancels, the `Clear` button writes `due: none`),
+  and the `⋯` menu gains "Set due date…" / "Clear due date" for keyboard use. The timeline's row chip
+  does the same; clicking a *bar* still opens the note. Writes go through a pure `setTaskDue` that
+  changes only the `due:` and `updated:` lines, compare-and-set guarded, with optimistic rollback and
+  a notice on failure — the same discipline as the status drag. A **"Needs a due date"** chip filters
+  to undated tasks so a batch can be scheduled in one pass. *(PRD 1.14 - FR-15, issue #41)*
+- **The task template now carries a due date.** `Wiki/templates/task.md` ships `due: YYYY-MM-DD`
+  instead of `due: none`, with the rule stated in the body; `Wiki/SCHEMA.md` makes `due` required on
+  task pages and `none` a deliberate exception, so a missing date is a visible decision rather than a
+  silently empty field. The action-item extraction skills keep "never invent a date" and now require
+  `due: none` to be recorded so those tasks surface under *Needs a due date*. *(issue #41)*
+
 - **Tasks view: filter by status, with Done hidden by default.** A "Status" row of chips (canonical
   four in column order, then any unmapped statuses present), each with its card count; `done` starts
   hidden, everything else — including unmapped values — stays visible. The row reports what it is
