@@ -1,7 +1,14 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.10 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Phiên bản: 1.11 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Changelog 1.11 (FR-16 — Timeline: restyle giao diện, issue #35): trục **2 tầng** (dải tháng +
+> tick tuần), nhãn ngày dạng "Sep 28" thay cho "09-28", **tô nền cuối tuần**, lưới phân cấp
+(ngày mảnh / tuần / tháng đậm) thay cho lớp gradient mỗi ngày, thanh bo góc có chip priority +
+> tên task bên trong, **hôm nay** = dải + đường + nhãn "Today", cột nhãn sticky có bóng đổ, và
+> **trạng thái hiện bằng chữ** trong cột nhãn (không chỉ dựa vào màu). Cột nhãn rộng 200px, thu
+> còn 132px ở ≤640px. Sửa bug: auto-scroll "về hôm nay" chạy lúc chưa có task nên bị kẹp về 0 —
+> giờ cuộn lại khi dải/zoom đổi và nhường người dùng ngay khi họ tự cuộn.
 > Changelog 1.10 (FR-16 — Tasks view: Timeline/Gantt, phần 2/2 của FR-15, issue #32): thêm chế độ
 > **Timeline** trong cùng Tasks view — mỗi task một thanh `raised`→`due` (fallback `created`, thiếu
 > `due` → thanh nét đứt mở chạy tới hôm nay), module thuần `web/src/lib/gantt.ts` tính trên chỉ số
@@ -593,6 +600,27 @@ Mục tiêu: chế độ **Timeline (Gantt)** trong cùng Tasks view (issue #32)
   path, không baseline, không kéo-thả để dời ngày, không cascade ngày, không milestone, không export/
   print. **Không thêm dependency runtime** (toàn bộ là số học + CSS). Không đổi server (không endpoint
   mới) nên `deploy/smoke.sh` giữ nguyên.
+- **Hiển thị (restyle #35)**: trục **hai tầng** — dải tháng (`September 2026`) trên, tick tuần dưới
+  (Day: mỗi ngày + `Sep 28` ở thứ Hai; Week: mỗi thứ Hai; Month: mỗi mùng 1). Lưới **phân cấp**:
+  hairline mỗi ngày khi `pxPerDay ≥ 12`, đường tuần đậm hơn, đường tháng 2px đậm nhất — bỏ hẳn lớp
+  `repeating-linear-gradient` mỗi ngày (trước đây là "sương mù" không đọc được). **Nền cuối tuần**
+  gộp Sat+Sun thành một khối. **Hôm nay** = dải màu cột ngày + đường 2px + nhãn `Today` trên dải
+  tháng, và cửa sổ tự cuộn về hôm nay khi mount (xem bug bên dưới). Thanh: 40px/26px, bo 6px, chữ
+  11.5px/500, chip priority bên trong, tên task trong thanh khi thanh ≥ 120px (ẩn ở chế độ compact),
+  bar mở **mờ dần** (mask) thay vì viền nét đứt, quá hạn = **viền đỏ + sọc chéo** (không chỉ dựa vào
+  màu), `:focus-visible` rõ ràng. Cột nhãn: chấm trạng thái + title 13px/500 + meta 11.5px nêu **tên
+  trạng thái bằng chữ**, due date tô đỏ khi quá hạn, bóng đổ mép phải để bar cuộn xuống dưới đọc là
+  "còn tiếp ở phía sau" chứ không phải bị cắt; **compact ≤640px**: cột nhãn 132px, meta rút gọn còn
+  trạng thái + hạn (priority đã có trên thanh), không hiện tên task trong thanh. Màu trạng thái đo
+  được: tương phản chữ trên thanh ≥ 4.5:1 ở cả hai theme (thấp nhất 4.70:1), `open` được nâng sáng
+  trên theme tối. Không thêm dependency runtime, không đổi server.
+- **Bug đã sửa (do kiểm chứng DOM + ảnh chụp phát hiện)**: `scrollToToday()` chạy ở effect mount khi
+  `tasks` còn rỗng → dải chỉ 31 ngày quanh hôm nay, container **chưa tràn** nên `scrollLeft` bị kẹp
+  về 0 và **đường hôm nay nằm ngoài màn hình**; đồng thời callback giữ `lineX` cũ (240px) nên cuộn sai
+  chỗ. Sửa: effect phụ thuộc `[lineX, pxPerDay]` (luôn dùng offset hiện tại), observe **cả** container
+  lẫn grid (nội dung tăng khi task về), và **nhường ngay khi người dùng tự cuộn/kéo/chạm hoặc đổi
+  zoom**. Test DOM thêm assertion "đường hôm nay phải nằm trong vùng nhìn thấy" — chính assertion này
+  bắt được bug (trước đó test chỉ so `offsetLeft`, tức hình học đúng nhưng người dùng không thấy gì).
 - **Kiểm thử**: unit test thuần `web/tests/gantt.test.ts` (parse ngày/kẹp ngày sai, nguồn ngày bắt đầu,
   mở/quá hạn, pad + luôn chứa hôm nay, cửa sổ rỗng, hình học thanh + floor, đường hôm nay, nhãn trục
   theo từng zoom, fallback 1 nhãn) và `web/tests/urlsync.test.ts` (`pathToUrl` mang mode, `modeFromUrl`,

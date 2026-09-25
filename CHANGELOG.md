@@ -6,6 +6,24 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Fixed
+- **The timeline now actually lands on today.** `scrollToToday()` ran on mount while the task list
+  was still empty: the placeholder range fit the pane, so `scrollLeft` clamped to 0, and the stale
+  offset meant the today line sat off-screen — invisible in both themes. The landing now re-runs when
+  the range or zoom changes, observes both the scroll container and the chart content, and yields the
+  moment you scroll, drag, tap or zoom yourself. Caught by asserting *visibility* in the headless DOM
+  check, not just the line's offset (which was always "correct"). *(issue #35)*
+
+### Changed
+- **Tasks timeline restyled.** Two-tier axis (month band above week ticks) with labels like `Sep 28`
+  instead of `09-28`; weekend shading; a layered grid (day hairlines, week lines, 2px month lines)
+  replacing the per-day gradient haze; a today band, line and `Today` pill; rounded bars with priority
+  chips and their title inside when there is room; open-ended bars fading out instead of a dashed
+  edge; overdue marked by a red ring *and* stripes rather than colour alone; status named in words in
+  the title column. The title column drops from 200px to 132px below 640px and hides the owner and
+  priority from its metadata. Every bar-text pair measures ≥4.5:1 in both themes (worst 4.70:1) and
+  the `open` bar is lifted on dark themes. *(issue #35)*
+
 ### Added
 - **Tasks timeline (Gantt)** — second mode of the Tasks view (`/tasks?mode=timeline`, command
   palette "Open tasks timeline"): one bar per `type: task` note from `raised` (fallback `created`)
