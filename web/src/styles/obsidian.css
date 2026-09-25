@@ -540,6 +540,31 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .cm-editor.cm-focused { outline: none !important; }
 .cm-editor .cm-content { font-family: var(--font-text); font-size: var(--font-text-size); line-height: var(--line-height-normal);
   margin: 0 auto; padding: 28px var(--file-margins) 40vh; caret-color: var(--text-normal); }
+/* The visible caret is NOT the native one: `drawSelection()` hides the real caret
+   (`caret-color: transparent !important`) and paints a `.cm-cursor` element instead,
+   whose colour CodeMirror hard-codes to black unless its `darkTheme` facet is on — this
+   app themes through CSS variables, so the facet never is, and on a dark theme the caret
+   was black on near-black. Colour the drawn caret from the palette (light and dark). */
+.cm-editor .cm-cursor,
+.cm-editor .cm-dropCursor { border-left-color: var(--text-normal) !important; }
+/* CodeMirror's own panels (the Find & Replace panel from openSearchPanel) ship a
+   hard-coded `&light` theme (`#f5f5f5` on black text) that only flips to its dark
+   variant when the `darkTheme` facet is on — which this app never sets — so the panel
+   stayed a bright light box on a dark UI. Theme it from the palette instead. */
+.cm-panels { background: var(--background-secondary) !important; color: var(--text-normal) !important; }
+.cm-panels.cm-panels-top { border-bottom: 1px solid var(--bg-modifier-border) !important; }
+.cm-panels.cm-panels-bottom { border-top: 1px solid var(--bg-modifier-border) !important; }
+.cm-panels .cm-textfield {
+  background: var(--background-primary) !important; color: var(--text-normal) !important;
+  border: 1px solid var(--bg-modifier-border) !important; border-radius: var(--radius-s);
+  padding: 2px 6px; font: inherit;
+}
+.cm-panels .cm-textfield:focus { border-color: var(--interactive-accent) !important; outline: none; }
+.cm-panels button.cm-button {
+  background: var(--interactive-accent) !important; color: var(--text-on-accent) !important;
+  border: none !important; border-radius: var(--radius-s); padding: 3px 10px; cursor: pointer;
+}
+.cm-panels button.cm-button:hover { background: var(--interactive-accent-hover) !important; }
 .markdown-source-view.is-readable-line-width .cm-content { max-width: var(--file-line-width); }
 .cm-editor .cm-line { padding: 0; }
 .cm-gutters { background: var(--background-primary) !important; border: 0 !important; color: var(--text-faint) !important; }

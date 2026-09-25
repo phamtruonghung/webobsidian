@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-25 (FR-2 — Live Preview: click đúng dòng, height map của CodeMirror khớp với DOM)
+Cập nhật lần cuối: 2026-09-25 (FR-2 — Live Preview: click đúng dòng + dark mode: caret/panel Find theo theme)
 
 ---
 
@@ -481,7 +481,31 @@ Cập nhật lần cuối: 2026-09-25 (FR-2 — Live Preview: click đúng dòng
       widget một note) cho `map height == rendered height`; layout các block khác không lệch 1px so với
       trước khi sửa (chỉ khoảng trắng "ảo" dưới table mất đi).
 
+## Phase 33 — Dark mode: caret + panel Find & Replace của CodeMirror theo theme — FR-2 (theo yêu cầu người dùng)
+- [x] M33.1 Xác định nguyên nhân: `drawSelection()` ẩn caret gốc và vẽ `.cm-cursor` với màu hard-code
+      `black`; `.cm-panels` (Find & Replace) hard-code `#f5f5f5`/chữ đen. Cả hai chỉ đổi sang bản `&dark`
+      khi facet `darkTheme` bật, mà app theme bằng CSS variable trên wrapper `.theme-*` → facet không bao
+      giờ bật. Đo được trên browser thật: caret `.cm-cursor` = `rgb(0,0,0)` trên nền `rgb(30,30,30)`;
+      panel `rgb(245,245,245)` + input trắng trên UI tối.
+- [x] M33.2 Sửa trong `web/src/styles/obsidian.css`: caret dùng `var(--text-normal)` (kèm `.cm-dropCursor`),
+      panel/`.cm-textfield`/`button.cm-button` theo palette (`--background-secondary`, `--background-primary`,
+      `--bg-modifier-border`, `--interactive-accent`, `--text-on-accent`).
+- [x] M33.3 Kiểm chứng (CDP + computed style + screenshot có vision đọc lại): caret `#dadada`/nền `#1e1e1e`
+      (Obsidian Dark — trước là `#000`), `#222222`/trắng (light), `#cdd6f4`/`#1e1e2e` (Catppuccin Mocha);
+      panel `rgb(38,38,38)`/chữ `#dadada`, light `#f6f6f6`, ctp-mocha `#181825`. Guard: `web/tests/editorTheme.test.ts`.
+
 ### Nhật ký tiến độ
+- 2026-09-25 (FR-2 — dark mode: caret đen trên nền tối): báo cáo "đổi sang dark mode thì con trỏ màu
+  đen, khó thấy". Nguyên nhân: `drawSelection()` ẩn caret gốc (`caret-color: transparent !important`)
+  và tự vẽ `.cm-cursor`, màu border bị CodeMirror hard-code là `black`; biến thể `&dark` chỉ bật khi
+  facet `darkTheme` được set — app theme bằng CSS variable nên facet không bao giờ bật → caret luôn
+  đen. Sửa: `.cm-editor .cm-cursor, .cm-editor .cm-dropCursor { border-left-color: var(--text-normal) }`.
+  Phát hiện cùng nguyên nhân: panel Find & Replace (`Ctrl+F`, `.cm-panels`) cũng là hộp sáng
+  `#f5f5f5` + input trắng mặc định của browser trên UI tối → theme lại panel/input/nút theo palette.
+  Kiểm chứng bằng browser thật (CDP, computed style + screenshot): Obsidian Dark caret `#dadada`
+  trên nền `#1e1e1e` (trước: `#000`), light `#222222` trên trắng, Catppuccin Mocha `#cdd6f4`;
+  panel dark giờ `rgb(38,38,38)` / chữ `#dadada`, light `#f6f6f6`, ctp-mocha `#181825`.
+  Guard: `web/tests/editorTheme.test.ts` (fail nếu để màu literal thay vì biến palette).
 - 2026-09-25 (FR-2 — click vào dòng nào caret phải ở dòng đó): bug "click 1 dòng nhưng con trỏ/ô sửa nhảy
   xuống 1-2 dòng dưới". Nguyên nhân: CodeMirror dựng **height map** từ border-box rect của các block và
   coi chúng xếp liền nhau, nên khoảng trắng do `margin` dọc giữa hai block **không** vào map → map ngắn

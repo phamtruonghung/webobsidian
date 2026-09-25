@@ -6,6 +6,21 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Dark themes — visible caret, and CodeMirror's Find panel follows the theme
+
+- **The caret is no longer black on a dark theme.** `drawSelection()` hides the native caret
+  (`caret-color: transparent !important`) and paints its own `.cm-cursor` element, whose border
+  CodeMirror hard-codes to `black` — its `&dark` variant only applies when the `darkTheme` facet is
+  on, and this app themes through CSS variables instead, so the facet never is. The drawn caret
+  (and the drop cursor) now takes `var(--text-normal)`; verified in a real browser as
+  `#dadada` on Obsidian Dark (was `#000` on `#1e1e1e`), `#222222` on light, `#cdd6f4` on Catppuccin
+  Mocha — and confirmed on a screenshot.
+- **The Find & Replace panel (`Ctrl+F`) is dark on dark themes.** Same root cause: its background is
+  CodeMirror's hard-coded light `#f5f5f5` (with browser-default white inputs). The panel, its text
+  fields and buttons are now themed from the palette on every theme.
+- Guard: `web/tests/editorTheme.test.ts` fails CI if these CodeMirror defaults are left at a literal
+  colour instead of a palette variable (it goes red if the caret rule is reverted to `black`).
+
 ### Live Preview — clicking a row no longer edits the row below it
 
 - **The caret now lands on the row you click.** CodeMirror builds its height map from border-box
