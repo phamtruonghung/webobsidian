@@ -15,3 +15,24 @@ import { createHash } from 'node:crypto';
 export function contentVersion(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex').slice(0, 16);
 }
+
+export type VersionCheck = { ok: true } | { ok: false; currentVersion: string };
+
+/**
+ * Shared compare-and-set check behind the Agent API's PUT /notes/* (base_version)
+ * and the web files route's PUT /content (baseVersion) — same semantics on both
+ * surfaces:
+ *  - `current` (the file's current content, or `null` if it doesn't exist) is
+ *    compared against `baseVersion`.
+ *  - File exists: ok iff `contentVersion(current) === baseVersion`.
+ *  - File missing: ok iff `baseVersion === ''` (the caller expects a fresh
+ *    note). Any other value is a conflict — without this, a write racing a
+ *    delete could silently recreate the note.
+ */
+export function checkVersion(current: string | null, baseVersion: string): VersionCheck {
+  if (current === null) {
+    return baseVersion === '' ? { ok: true } : { ok: false, currentVersion: '' };
+  }
+  const currentVersion = contentVersion(current);
+  return currentVersion === baseVersion ? { ok: true } : { ok: false, currentVersion };
+}

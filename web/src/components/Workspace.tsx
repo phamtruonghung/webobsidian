@@ -1,10 +1,11 @@
-import { useStore, GRAPH_PATH, type ContextMenuItem } from '../lib/store';
+import { useStore, GRAPH_PATH, TASKS_PATH, isViewPath, type ContextMenuItem } from '../lib/store';
 import { api } from '../lib/api';
 import Editor from './Editor';
 import Preview from './Preview';
 import GraphView from './GraphView';
 import CanvasView from './CanvasView';
 import FolderView from './FolderView';
+import TasksView from './TasksView';
 import { isFolderPath } from '../lib/tree';
 import Icon from './Icon';
 import StatusBar from './StatusBar';
@@ -145,6 +146,9 @@ export default function Workspace() {
         { label: '', separator: true },
         ...tabItems,
       ];
+    } else if (path === TASKS_PATH) {
+      // Virtual view, not a file — no rename/move/copy/delete/share.
+      items = [...tabItems];
     } else {
       const sep: ContextMenuItem = { label: '', separator: true };
       const renameItem: ContextMenuItem = {
@@ -310,6 +314,9 @@ export default function Workspace() {
               {t.path === GRAPH_PATH && (
                 <Icon name="graph" size={13} style={{ marginRight: 4, flexShrink: 0 }} />
               )}
+              {t.path === TASKS_PATH && (
+                <Icon name="check-square" size={13} style={{ marginRight: 4, flexShrink: 0 }} />
+              )}
               <span className="title">{t.title.replace(/\.(md|markdown)$/, '')}</span>
               {dirty && activePath === t.path ? (
                 <span className="dot">●</span>
@@ -356,6 +363,8 @@ export default function Workspace() {
           <span className="crumbs">
             {activePath === GRAPH_PATH
               ? 'Graph view'
+              : activePath === TASKS_PATH
+              ? 'Tasks'
               : activePath.split('/').map((seg, i) => (
                   <span key={i}>
                     {i > 0 && <span className="sep">/</span>}
@@ -395,7 +404,7 @@ export default function Workspace() {
         </div>
       )}
 
-      {!isMobile && activePath && activePath !== GRAPH_PATH && isMd && viewMode !== 'reading' && (
+      {!isMobile && activePath && !isViewPath(activePath) && isMd && viewMode !== 'reading' && (
         <FormatToolbar />
       )}
 
@@ -415,12 +424,17 @@ export default function Workspace() {
             <GraphView />
           </div>
         )}
-        {activePath && activePath !== GRAPH_PATH && activeIsFolder && (
+        {activePath === TASKS_PATH && (
+          <div className="pane main-pane">
+            <TasksView />
+          </div>
+        )}
+        {activePath && !isViewPath(activePath) && activeIsFolder && (
           <div className="pane main-pane">
             <FolderView path={activePath} />
           </div>
         )}
-        {activePath && activePath !== GRAPH_PATH && !activeIsFolder && (
+        {activePath && !isViewPath(activePath) && !activeIsFolder && (
           <div className="pane main-pane">
             <EditorPane />
           </div>
@@ -438,7 +452,7 @@ export default function Workspace() {
           </div>
         )}
       </div>
-      {isMobile && activePath && activePath !== GRAPH_PATH && isMd && viewMode !== 'reading' && (
+      {isMobile && activePath && !isViewPath(activePath) && isMd && viewMode !== 'reading' && (
         <FormatToolbar mobile />
       )}
       <StatusBar />

@@ -4,6 +4,7 @@ import { getSettings } from './settings.js';
 import { INDEX_FILE, config } from '../config.js';
 import { listMarkdownFiles, readFileText } from './vault.js';
 import { parseNote } from './markdown.js';
+import { taskRecordFrom, type TaskRecord } from './tasks.js';
 
 /**
  * QMD — the WebObsidian search engine.
@@ -73,12 +74,15 @@ function shiftRanges(untrimmed: string, ranges: [number, number][]): [number, nu
     .filter(([s]) => s < trimmedLen);
 }
 
-class QmdEngine {
+export class QmdEngine {
   private mini: MiniSearch<QmdDoc>;
   private snippets = new Map<string, string>();
   private tagSet = new Map<string, string[]>();
   // Per-note frontmatter key→type, for the vault-wide property suggestions list.
   private propMeta = new Map<string, Record<string, string>>();
+  // `type: task` notes (PRD FR-15), keyed by path — built alongside the search
+  // index so the Tasks board never triggers a per-request vault walk.
+  private tasks = new Map<string, TaskRecord>();
   private ready = false;
 
   constructor() {
@@ -114,6 +118,9 @@ class QmdEngine {
     const meta: Record<string, string> = {};
     for (const [k, v] of Object.entries(note.frontmatter ?? {})) meta[k] = inferPropType(k, v);
     this.propMeta.set(rel, meta);
+    const task = taskRecordFrom(rel, note);
+    if (task) this.tasks.set(rel, task);
+    else this.tasks.delete(rel);
     const body = note.body.length > QmdEngine.MAX_BODY ? note.body.slice(0, QmdEngine.MAX_BODY) : note.body;
     return {
       id: rel,
@@ -133,6 +140,7 @@ class QmdEngine {
     this.snippets.clear();
     this.tagSet.clear();
     this.propMeta.clear();
+    this.tasks.clear();
     for (const rel of files) {
       try {
         this.mini.add(await this.toDoc(rel));
@@ -160,6 +168,7 @@ class QmdEngine {
     this.snippets.delete(rel);
     this.tagSet.delete(rel);
     this.propMeta.delete(rel);
+    this.tasks.delete(rel);
   }
 
   async rename(from: string, to: string): Promise<void> {
@@ -272,6 +281,42 @@ class QmdEngine {
     return { path: rel, count: occ.length, contexts };
   }
 
+  /** All `type: task` notes (PRD FR-15), sorted by path. Ensures the index is
+   *  built first, same as search(), so callers never see a cold-start empty list. */
+  async allTasks(): Promise<TaskRecord[]> {
+    if (!this.ready) await this.build();
+    return [...this.tasks.values()].sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  /**
+   * Rebuild the tasks map from the vault. Unlike the search index (whose
+   * staleness after a restart is pre-existing/out of scope — served from the
+   * persisted `mini`/`snippets`/etc until the next edit or /api/reindex), the
+   * Tasks board's contract is "source of truth stays the markdown vault": a
+   * note edited while the server was down (or a deploy's `git pull`, which the
+   * watcher's `ignoreInitial` never reports) must show its current column
+   * right after boot, not whatever was true at the last full build.
+   *
+   * Called once at boot after a successful restore() (see initSearch()) — NOT
+   * per request. One vault walk, same shape as buildLinkGraph(). Replaces the
+   * map atomically at the end so a concurrent allTasks() never observes a
+   * partially-rebuilt map.
+   */
+  async refreshTasks(): Promise<void> {
+    const files = await listMarkdownFiles();
+    const next = new Map<string, TaskRecord>();
+    for (const rel of files) {
+      try {
+        const note = parseNote(rel, await readFileText(rel));
+        const task = taskRecordFrom(rel, note);
+        if (task) next.set(rel, task);
+      } catch {
+        /* skip unreadable */
+      }
+    }
+    this.tasks = next;
+  }
+
   allTags(): { tag: string; count: number }[] {
     const counts = new Map<string, number>();
     for (const tags of this.tagSet.values()) {
@@ -312,6 +357,9 @@ class QmdEngine {
   private async persist(): Promise<void> {
     try {
       await fs.mkdir(config.dataDir, { recursive: true });
+      // `tasks` is deliberately NOT persisted (see refreshTasks()'s doc comment):
+      // the Tasks board must always reflect the vault as of boot, not whatever
+      // was true at the last full build.
       const payload = {
         mini: this.mini.toJSON(),
         snippets: [...this.snippets.entries()],
@@ -341,6 +389,10 @@ class QmdEngine {
       this.snippets = new Map(payload.snippets);
       this.tagSet = new Map(payload.tags);
       this.propMeta = new Map(payload.propMeta ?? []);
+      // this.tasks is intentionally left alone here — restore() doesn't load a
+      // persisted tasks map (there isn't one any more); initSearch() calls
+      // refreshTasks() right after a successful restore to populate it from
+      // the vault as it is right now.
       this.ready = true;
       return true;
     } catch {
@@ -378,8 +430,12 @@ function parseFielded(query: string): { filterText: string; fields: string[] } {
 
 export const qmd = new QmdEngine();
 
-/** Initialize the engine: restore from disk or build fresh. */
+/** Initialize the engine: restore from disk or build fresh. build() already
+ *  fills the tasks map (via toDoc); a successful restore() doesn't (tasks
+ *  aren't persisted — see refreshTasks()), so refresh it once here, from the
+ *  vault as it is right now — not per request. */
 export async function initSearch(): Promise<void> {
   const restored = await qmd.restore();
   if (!restored) await qmd.build();
+  else await qmd.refreshTasks();
 }

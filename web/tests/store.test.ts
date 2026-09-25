@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, mock, test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 import { api } from '../src/lib/api';
-import { GRAPH_PATH, useStore } from '../src/lib/store';
+import { GRAPH_PATH, TASKS_PATH, isViewPath, useStore } from '../src/lib/store';
 
 // Workspace persistence uses browser timers; run them deterministically in Node.
 Object.defineProperty(globalThis, 'window', {
@@ -94,6 +94,25 @@ test('out-of-order reads cannot replace the most recently selected note', async 
   assert.deepEqual(paths(), ['Fast.md']);
   assert.equal(state().activePath, 'Fast.md');
   assert.equal(state().content, '# Fast');
+});
+
+test('openTasks() opens one "Tasks" tab at TASKS_PATH, and openFile(TASKS_PATH) routes to it', async () => {
+  await state().openTasks();
+  assert.deepEqual(paths(), [TASKS_PATH]);
+  assert.equal(state().tabs[0].title, 'Tasks');
+  assert.equal(state().activePath, TASKS_PATH);
+
+  await state().openFile('Note.md');
+  await state().openFile(TASKS_PATH);
+  assert.deepEqual(paths(), [TASKS_PATH, 'Note.md']); // reuses the existing Tasks tab, doesn't duplicate it
+  assert.equal(state().activePath, TASKS_PATH);
+});
+
+test('isViewPath is true only for the Graph/Tasks sentinel tab paths', () => {
+  assert.equal(isViewPath(GRAPH_PATH), true);
+  assert.equal(isViewPath(TASKS_PATH), true);
+  assert.equal(isViewPath('Wiki/Note.md'), false);
+  assert.equal(isViewPath(null), false);
 });
 
 test('opening Graph view cancels an older pending note selection', async () => {

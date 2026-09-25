@@ -8,6 +8,7 @@ import { parseNote } from '../services/markdown.js';
 import { applyEdit } from '../services/noteedit.js';
 import { contentVersion } from '../services/noteversion.js';
 import { grepNote } from '../services/notegrep.js';
+import { listTasks } from './tasks.js';
 
 /**
  * Agent API (PRD FR-6) — REST surface for AI agents, authenticated by API key.
@@ -264,6 +265,17 @@ agentRouter.get(
   asyncHandler(async (req, res) => {
     const rel = String(req.query.path ?? '');
     res.json({ path: rel, backlinks: backlinksFor(rel) });
+  }),
+);
+
+// Tasks (PRD FR-15) — same records/filters as GET /api/tasks (web), read scope.
+// listTasks (routes/tasks.ts) is the single place that loads the index and
+// applies the filter, so this route and the web one can't drift apart.
+agentRouter.get(
+  '/tasks',
+  requireApiKey('read'),
+  asyncHandler(async (req, res) => {
+    res.json(await listTasks(req.query as Record<string, unknown>));
   }),
 );
 

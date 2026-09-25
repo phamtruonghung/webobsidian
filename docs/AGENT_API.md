@@ -25,6 +25,7 @@ All `{path}` values are vault-relative (URL-encode slashes are fine, e.g. `Notes
 | GET | `/api/v1/search?q=&limit=` | search | QMD search |
 | GET | `/api/v1/backlinks?path=` | read | Notes linking to a path |
 | GET | `/api/v1/tags` | read | All tags with counts |
+| GET | `/api/v1/tasks?folder=&status=&priority=&owner=&q=` | read | `type: task` notes (Kanban board state), normalised and filterable |
 
 ## Reading and editing without clobbering
 
@@ -101,6 +102,10 @@ curl -H "X-API-Key: $KEY" "$BASE/search?q=tag:idea%20graph&limit=5"
 
 # backlinks
 curl -H "X-API-Key: $KEY" "$BASE/backlinks?path=Welcome.md"
+
+# tasks board (FR-15): every type: task note, or a filtered subset
+curl -H "X-API-Key: $KEY" "$BASE/tasks"
+curl -H "X-API-Key: $KEY" "$BASE/tasks?folder=Wiki/tasks&status=blocked&owner=hung"
 ```
 
 ## Response shapes
@@ -137,7 +142,26 @@ curl -H "X-API-Key: $KEY" "$BASE/backlinks?path=Welcome.md"
 { "query": "graph", "hits": [
   { "path": "Notes/Ideas.md", "title": "Ideas", "score": 4.2, "tags": ["idea"], "snippet": "..." }
 ] }
+
+// GET /tasks?folder=&status=&priority=&owner=&q=  (all params optional; sorted by path)
+{ "tasks": [
+  {
+    "path": "Wiki/tasks/deliver-2027-budget-planning.md",
+    "title": "Deliver the 2027 budget plan to the manager",
+    "status": "open", "statusRaw": "open",
+    "priority": "P1", "owner": "hung",
+    "due": "2026-09-29", "raised": "2026-09-15", "created": "2026-09-15", "updated": "2026-09-15",
+    "tags": ["action-item", "planning", "budget"]
+  }
+] }
 ```
+
+`status` is the canonical column id (`open` / `in-progress` / `blocked` / `done`) when the note's
+`status:` frontmatter is canonical or a known alias (`todo`→open, `doing`/`wip`→in-progress,
+`waiting`/`on-hold`→blocked, `closed`/`completed`/`complete`→done); an unrecognised value is kept
+verbatim (its own board column) instead of being coerced; a missing `status:` key defaults to
+`open` with `statusRaw: null`. A note only appears here when its frontmatter `type` is `task` and
+no path segment is named `templates` (so `Wiki/templates/task.md` itself is excluded).
 
 ## Error responses
 
