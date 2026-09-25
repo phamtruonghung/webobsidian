@@ -23,6 +23,7 @@ import {
   type Zoom,
 } from '../lib/gantt';
 import { CANONICAL_STATUSES, todayISO } from '../lib/tasks';
+import DueDateEditor from './DueDateEditor';
 import Icon from './Icon';
 
 /** Width of the sticky title column — shared with the CSS via --gantt-label-w.
@@ -69,7 +70,20 @@ function barTitle(b: GanttBar): string {
  * Deliberately *no* dependencies, auto-scheduling, critical path or
  * drag-to-reschedule — those are the issue's non-goals.
  */
-export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onOpen: (path: string) => void }) {
+export default function GanttChart({
+  tasks,
+  onOpen,
+  dueEditPath = null,
+  onEditDue,
+  onSetDue,
+}: {
+  tasks: TaskRecord[];
+  onOpen: (path: string) => void;
+  /** Path whose due date is being edited inline (#41). */
+  dueEditPath?: string | null;
+  onEditDue: (path: string | null) => void;
+  onSetDue: (path: string, due: string) => void;
+}) {
   const [zoom, setZoom] = useState<Zoom>('week');
   const [narrowViewport, setNarrowViewport] = useState(() => window.matchMedia(COMPACT_QUERY).matches);
   /** Width of the chart pane itself (the scroll container). */
@@ -158,11 +172,17 @@ export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onO
       measure();
       land();
     });
+    const onWindowResize = () => requestAnimationFrame(() => {
+      measure();
+      land();
+    });
+    window.addEventListener('resize', onWindowResize);
     el.addEventListener('wheel', takeOver, { passive: true });
     el.addEventListener('pointerdown', takeOver);
     el.addEventListener('touchstart', takeOver, { passive: true });
     return () => {
       cancelAnimationFrame(raf);
+      window.removeEventListener('resize', onWindowResize);
       ro.disconnect();
       el.removeEventListener('wheel', takeOver);
       el.removeEventListener('pointerdown', takeOver);
@@ -273,20 +293,35 @@ export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onO
               const cls = statusClass(b.status);
               return (
                 <div className={`gantt-row ${i % 2 ? 'odd' : ''}`} key={b.path}>
-                  <button type="button" className="gantt-label" title={b.path} onClick={() => onOpen(b.path)}>
-                    <span className="gantt-label-top">
-                      <span className={`gantt-status-dot status-${cls}`} />
-                      <span className="gantt-label-title">{b.title}</span>
-                    </span>
-                    <span className="gantt-label-meta">
-                      <span className="gantt-meta-status">{statusLabel(b.status)}</span>
-                      {!compact && b.priority && <span>{b.priority}</span>}
-                      {!compact && b.owner && <span>{b.owner}</span>}
-                      <span className={b.overdue ? 'gantt-meta-overdue' : ''}>
-                        {b.openEnded ? 'no due' : dayToShort(b.endDay)}
+                  <div className="gantt-label-cell">
+                    <button type="button" className="gantt-label" title={b.path} onClick={() => onOpen(b.path)}>
+                      <span className="gantt-label-top">
+                        <span className={`gantt-status-dot status-${cls}`} />
+                        <span className="gantt-label-title">{b.title}</span>
                       </span>
-                    </span>
-                  </button>
+                      <span className="gantt-label-meta">
+                        <span className="gantt-meta-status">{statusLabel(b.status)}</span>
+                        {!compact && b.priority && <span>{b.priority}</span>}
+                        {!compact && b.owner && <span>{b.owner}</span>}
+                      </span>
+                    </button>
+                    {dueEditPath === b.path ? (
+                      <DueDateEditor
+                        value={b.openEnded ? null : dayToISO(b.endDay)}
+                        onCommit={(due) => onSetDue(b.path, due)}
+                        onCancel={() => onEditDue(null)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className={`gantt-due ${b.overdue ? 'overdue' : ''} ${b.openEnded ? 'undated' : ''}`}
+                        title={b.openEnded ? 'No due date — click to set one' : `Due ${dayToISO(b.endDay)} — click to change`}
+                        onClick={() => onEditDue(b.path)}
+                      >
+                        {b.openEnded ? 'no due' : dayToShort(b.endDay)}
+                      </button>
+                    )}
+                  </div>
                   <div className="gantt-track" style={{ width: axisPx }}>
                     <button
                       type="button"

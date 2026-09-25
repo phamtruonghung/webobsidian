@@ -589,7 +589,36 @@ Cập nhật lần cuối: 2026-09-25 (FR-16 — Timeline/Gantt: restyle giao di
       Done → 10 thanh, tắt → 9; cột Done rỗng với `+1 hidden`; hình học thanh vẫn khớp kỳ vọng Python
       (9/9); 51/51 check PASS.
 
+## Phase 37 — Tasks view: đặt hạn từ board/timeline + quy ước `due` — FR-15 (issue #41)
+- [x] M37.1 `web/src/lib/tasks.ts`: tách phép ghi frontmatter dùng chung `writeFrontmatterKeys` (một chỗ lo
+      BOM/CRLF/thứ tự key), `setTaskStatus`/`setTaskDue` chỉ còn khai báo key; thêm `isUndated`,
+      `changeTaskDue` (CAS). 9 unit test mới (thay/thêm dòng `due`, `none` không bị quote, tạo frontmatter,
+      giữ CRLF+BOM, và một test khoá hành vi `setTaskStatus` sau refactor).
+- [x] M37.2 Nút hạn trên thẻ (caret ▾, editor tại chỗ) + menu `⋯` "Set due date…"/"Clear due date" +
+      control tương tự ở cột nhãn timeline (`.gantt-label-cell` tách khỏi nút tiêu đề để không lồng button);
+      optimistic + rollback + notify.
+- [x] M37.3 Chip "Needs a due date" (đếm theo tập đang hiện) + bộ lọc chỉ-hiện-task-chưa-hạn.
+- [x] M37.4 Vault: `Wiki/templates/task.md` (`due: YYYY-MM-DD` + quy ước), `Wiki/SCHEMA.md` (`due` bắt
+      buộc, `none` là ngoại lệ cố ý, hạn đặt từ board); bump `updated` cả hai. Patch skill
+      `document-to-action-items` + `meeting-action-items`: giữ nguyên "không bịa ngày", thêm yêu cầu
+      *quyết định* ngày — không có ngày thì ghi `due: none` để hiện ở "Needs a due date".
+- [x] M37.5 Kiểm chứng headless 63/63 PASS, gồm 12 check cho hạn: đặt hạn từ thẻ → **đọc file trên đĩa**
+      xác nhận đúng dòng `due:` được ghi và chỉ `due:`/`updated:` đổi; chip đếm 3 → 2; lọc undated;
+      timeline có chip "no due" bấm được; Esc không ghi; Clear trả về `due: none`. Hai bug thật do kiểm
+      chứng bắt: (a) `showPicker()` nuốt phím Enter (bỏ); (b) click **Clear** làm input blur → commit →
+      editor unmount trước khi click tới nơi (sửa: blur chỉ commit khi focus rời khỏi editor).
+
 ### Nhật ký tiến độ
+- 2026-09-26 (FR-15 — Tasks view: đặt hạn từ board/timeline, issue #41): người dùng hỏi vì sao nhiều task
+  không có hạn và làm sao thêm — 5/9 note `due: none`. Chọn hướng "làm chức năng" + sửa template. Quyết
+  định (PRD FR-15): badge hạn thành control mở `<input type="date">` tại chỗ, menu `⋯` có "Set due date…";
+  ghi bằng `setTaskDue` (tách chung một hàm phẫu thuật frontmatter với `setTaskStatus`), CAS `baseVersion`;
+  chip "Needs a due date" lọc task chưa hạn; template đổi sang `due: YYYY-MM-DD` + quy ước, SCHEMA nói
+  `due` bắt buộc và `none` là ngoại lệ cố ý; skill trích xuất action-item vẫn **không bịa ngày** nhưng phải
+  ghi `due: none` để việc thiếu hạn hiện ra thay vì im lặng. **Kiểm chứng**: `npm test` 143 server + 105
+  web (9 test mới); typecheck + build xanh; headless **63/63 PASS** — trong đó 12 check đọc thẳng file
+  trong vault để chứng minh chỉ `due:`/`updated:` đổi; template + SCHEMA đã ghi vào vault thật và đọc lại
+  xác nhận. M37.1–M37.5 `[x]`.
 - 2026-09-25 (FR-15 — Tasks view: lọc theo trạng thái, mặc định ẩn Done, issue #39): người dùng yêu cầu
   thêm chức năng lọc theo trạng thái và mặc định không hiện Done. Quyết định khung (ghi ở PRD FR-15):
   chip theo trạng thái kèm số thẻ ở hàng riêng; mặc định chỉ ẩn `done`, giá trị lạ vẫn hiện; **cột Done

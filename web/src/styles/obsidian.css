@@ -1188,6 +1188,12 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 }
 .task-priority { background: var(--tag-bg); color: var(--text-accent); }
 .task-due.overdue { background: rgba(214, 69, 61, 0.15); color: #d6453d; }
+button.task-due { border: none; font: inherit; font-size: 11px; cursor: pointer; }
+button.task-due:hover { border-color: var(--interactive-accent); box-shadow: inset 0 0 0 1px var(--interactive-accent); }
+button.task-due.undated { background: transparent; box-shadow: inset 0 0 0 1px var(--background-modifier-border); color: var(--text-faint); }
+.task-due-caret { font-size: 9px; opacity: 0.55; margin-left: 2px; }
+button.task-due:hover .task-due-caret { opacity: 1; }
+.chip-undated { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-faint); }
 .task-card-tags { display: flex; flex-wrap: wrap; gap: 3px; }
 .task-card-tags .tag-pill { margin: 0; padding: 1px 8px; font-size: 11px; }
 .task-card-path { font-size: 11px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1277,16 +1283,20 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .gantt-row.odd { --gantt-row-tint: rgba(127, 127, 127, 0.045); }
 .gantt-row:hover { --gantt-row-tint: rgba(127, 127, 127, 0.09); }
 
-.gantt-label {
+.gantt-label-cell {
   position: sticky; left: 0; z-index: 2; flex: 0 0 var(--gantt-label-w); width: var(--gantt-label-w);
-  display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 4px 10px;
-  border: none; border-right: 1px solid var(--background-modifier-border);
+  display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 10px;
+  border-right: 1px solid var(--background-modifier-border);
   background-color: var(--background-primary);
   background-image: linear-gradient(var(--gantt-row-tint), var(--gantt-row-tint));
-  font: inherit; color: inherit; text-align: left; cursor: pointer; overflow: hidden;
   box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.35);
 }
-.gantt-compact .gantt-label { padding: 4px 8px; }
+.gantt-label {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  padding: 0; border: none; background: transparent;
+  font: inherit; color: inherit; text-align: left; cursor: pointer; overflow: hidden;
+}
+.gantt-compact .gantt-label-cell { padding: 4px 6px 4px 8px; }
 .gantt-compact .gantt-label-title { font-size: 12.5px; }
 .gantt-compact .gantt-label-meta { font-size: 11px; }
 .gantt-label:hover .gantt-label-title { color: var(--text-accent); }
@@ -1303,6 +1313,27 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .gantt-label-meta > span + span::before { content: '·'; margin-right: 6px; color: var(--text-faint); }
 .gantt-meta-status { font-weight: 500; color: var(--text-normal); }
 .gantt-meta-overdue { color: #e11d48; font-weight: 600; }
+
+/* Due-date control in the timeline row (#41) and the shared inline editor. */
+.gantt-due {
+  flex: none; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--background-modifier-border);
+  background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.gantt-due:hover { color: var(--text-normal); border-color: var(--interactive-accent); }
+.gantt-due:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.gantt-due.undated { border-style: dashed; color: var(--text-faint); }
+.gantt-due.overdue { color: #e11d48; border-color: rgba(225, 29, 72, 0.55); }
+.due-editor { display: inline-flex; align-items: center; gap: 4px; }
+.due-editor-input {
+  font: inherit; font-size: 11.5px; max-width: 132px; padding: 1px 4px;
+  border: 1px solid var(--interactive-accent); border-radius: var(--radius-s);
+  background: var(--background-primary); color: var(--text-normal);
+}
+.due-editor-clear {
+  border: none; background: transparent; color: var(--text-faint);
+  font-size: 11px; text-decoration: underline; cursor: pointer;
+}
+.due-editor-clear:hover { color: var(--text-normal); }
 
 .gantt-status-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
 .gantt-status-dot.status-open { background: #4b5563; }
