@@ -17,6 +17,7 @@ import { COOKIE_NAME } from './middleware/auth.js';
 import { verifyToken } from './services/auth.js';
 import { authRouter } from './routes/auth.js';
 import { filesRouter } from './routes/files.js';
+import { tasksRouter } from './routes/tasks.js';
 import { searchRouter } from './routes/search.js';
 import { settingsRouter } from './routes/settings.js';
 import { gitRouter } from './routes/git.js';
@@ -131,6 +132,7 @@ async function main() {
   app.use('/auth', authRouter);
   app.use('/api/v1', agentRouter); // agent API (api-key auth)
   app.use('/api/files', filesRouter);
+  app.use('/api/tasks', tasksRouter); // Kanban board over type: task notes (FR-15)
   app.use('/api/settings', settingsRouter);
   app.use('/api/git', gitRouter);
   app.use('/api/keys', keysRouter);

@@ -12,6 +12,7 @@ import { resolveFile } from '../services/fileindex.js';
 import { onFileRenamed } from '../services/shares.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
+import { contentVersion, checkVersion } from '../services/noteversion.js';
 
 export const filesRouter = Router();
 filesRouter.use(requireAuth);
@@ -51,7 +52,10 @@ filesRouter.get(
       if (resolved) rel = resolved;
     }
     if (vault.isTextFile(rel)) {
-      res.json({ path: rel, content: await vault.readFileText(rel), encoding: 'utf8' });
+      const content = await vault.readFileText(rel);
+      // Additive: existing clients that ignore `version` are unaffected. Used as
+      // the compare-and-set base for PUT (e.g. the Tasks board's write-back).
+      res.json({ path: rel, content, encoding: 'utf8', version: contentVersion(content) });
     } else {
       // Stream with Range support so embedded <video>/<audio> can seek.
       const abs = await vault.resolveInVault(rel);
@@ -63,14 +67,27 @@ filesRouter.get(
 filesRouter.put(
   '/content',
   asyncHandler(async (req, res) => {
-    const { path: rel, content } = req.body ?? {};
+    const { path: rel, content, baseVersion } = req.body ?? {};
     if (typeof rel !== 'string' || typeof content !== 'string') {
       res.status(400).json({ error: 'path and content required' });
       return;
     }
+    // Optimistic lock (compare-and-set), same contract as the Agent API's
+    // base_version: only checked when the caller sends baseVersion — omitting
+    // it keeps the old last-writer-wins autosave behaviour byte-for-byte. When
+    // baseVersion IS sent, a missing file only satisfies baseVersion === '' —
+    // otherwise a card move racing a delete would silently recreate the note.
+    if (typeof baseVersion === 'string') {
+      const exists = await vault.exists(rel);
+      const check = checkVersion(exists ? await vault.readFileText(rel) : null, baseVersion);
+      if (!check.ok) {
+        res.status(409).json({ error: 'version_conflict', currentVersion: check.currentVersion });
+        return;
+      }
+    }
     await vault.writeFileText(rel, content);
     reindex({ upsert: rel, added: rel });
-    res.json({ ok: true, path: rel });
+    res.json({ ok: true, path: rel, version: contentVersion(content) });
   }),
 );
 
