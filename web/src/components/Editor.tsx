@@ -26,6 +26,8 @@ import {
   noteTitleField,
   inlineTitleField,
   editorClickFix,
+  mediaLoadRemeasure,
+  livePreviewGeometryGuard,
   livePreviewReadonly,
   setLivePreviewReadonly,
   setLivePreviewEnabled,
@@ -289,6 +291,8 @@ export default function Editor() {
         livePreviewPlugin,
         livePreviewTheme,
         editorClickFix,
+        mediaLoadRemeasure,
+        livePreviewGeometryGuard,
         EditorView.updateListener.of((u) => {
           // Ignore doc changes we applied programmatically (external content sync)
           if (u.docChanged && !applyingExternal.current) setContent(u.state.doc.toString());

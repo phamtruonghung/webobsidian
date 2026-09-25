@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-20 (FR-9 — build identity: /healthz trả version+build, deploy assert đúng image đang chạy)
+Cập nhật lần cuối: 2026-09-25 (FR-2 — Live Preview: click đúng dòng, height map của CodeMirror khớp với DOM)
 
 ---
 
@@ -463,7 +463,39 @@ Cập nhật lần cuối: 2026-09-20 (FR-9 — build identity: /healthz trả v
       bundle desktop. Root scripts `desktop`/`desktop:dist`/`desktop:publish`; `.gitignore` thêm `desktop/.gen`,
       `desktop/release`.
 
+## Phase 32 — Live Preview: click đúng dòng (height map của CodeMirror) — FR-2 (theo yêu cầu người dùng)
+- [x] M32.1 Xác định nguyên nhân bằng browser thật (Chromium + CDP, dev instance, vault test dựng riêng):
+      CodeMirror đo block theo border-box rect và giả định các block xếp liền nhau → `margin` dọc giữa hai
+      block không vào height map → map ngắn hơn DOM (đo: title+properties+table = −76px) → click phía dưới
+      rơi xuống 1–2 dòng. Bằng chứng trước/sau: 17/22 click lệch 1 dòng → 60/60 click đúng dòng.
+- [x] M32.2 Sửa: bỏ `margin` dọc trên mọi block widget của editor, thay bằng `padding` trên đúng box mà
+      CodeMirror đo — `.cm-inline-title`, `.cm-properties` (shell trong `FrontmatterWidget.toDOM`),
+      `.cm-table-wrap` (+ `display:block; width:fit-content` để bỏ ~7px của line box ẩn do `inline-block`),
+      `.cm-html-preview`, `.cm-html-block`, `.cm-mermaid`. Margin **bên trong** block có padding vẫn giữ.
+- [x] M32.3 Ảnh/iframe load sau khi CodeMirror đo → map thiếu đúng chiều cao ảnh: thêm
+      `mediaLoadRemeasure` (re-measure khi `load`/`error` trong editor).
+- [x] M32.4 Guard chống tái phạm: `web/tests/editorSpacing.test.ts` (CI, fail khi có margin dọc trên block
+      của editor; self-check của parser) + `livePreviewGeometryGuard` (dev-only, warn khi map ngắn hơn nội
+      dung render). Quy ước ghi ở README › *Live Preview geometry* và CONTRIBUTING.
+- [x] M32.5 Kiểm chứng: `npm test` + typecheck + build sạch; audit hình học trên 16 note test (mỗi loại
+      widget một note) cho `map height == rendered height`; layout các block khác không lệch 1px so với
+      trước khi sửa (chỉ khoảng trắng "ảo" dưới table mất đi).
+
 ### Nhật ký tiến độ
+- 2026-09-25 (FR-2 — click vào dòng nào caret phải ở dòng đó): bug "click 1 dòng nhưng con trỏ/ô sửa nhảy
+  xuống 1-2 dòng dưới". Nguyên nhân: CodeMirror dựng **height map** từ border-box rect của các block và
+  coi chúng xếp liền nhau, nên khoảng trắng do `margin` dọc giữa hai block **không** vào map → map ngắn
+  hơn DOM (đo được: title + properties + table làm map thiếu 76px) → mọi click phía dưới rơi xuống 1-2
+  dòng. Sửa: chuyển khoảng cách dọc của các block widget (`.cm-inline-title`, `.cm-properties` qua
+  `FrontmatterWidget.toDOM` shell, `.cm-table-wrap`, `.cm-html-preview`, `.cm-html-block`, `.cm-mermaid`)
+  từ `margin` sang `padding`; `.cm-table-wrap` đổi `inline-block` → `display:block; width:fit-content`
+  (line box ẩn của inline-block thêm ~7px vô hình với map). Thêm `mediaLoadRemeasure` (ảnh/iframe load
+  sau khi CM đo → re-measure, trước đây map thiếu đúng chiều cao ảnh) + guard: test CI
+  `web/tests/editorSpacing.test.ts` (fail nếu tái xuất margin dọc trên block của editor) và
+  `livePreviewGeometryGuard` (chỉ dev, warn khi map ngắn hơn nội dung render). Kiểm chứng trên Chromium
+  thật (dev instance, CDP): 60/60 click đúng dòng (trước khi sửa 17/22 click lệch 1 dòng), mọi note
+  isolation cho map == DOM, layout các block khác không đổi 1px. Ghi lại quy ước ở README › *Live Preview
+  geometry* + CONTRIBUTING (CLAUDE.md không sửa được trong phiên này: file agent-instruction bị chặn ghi).
 - 2026-09-20 (FR-9 — build identity + deploy truthfulness): câu hỏi "đang chạy version nào?" giờ trả lời
   được bằng 1 lệnh. `/healthz` trả `{ok, version, build}` với `version` đọc từ `package.json` gốc và
   `build` là commit nhúng lúc build (`--build-arg GIT_SHA` → `ENV WEBOBSIDIAN_BUILD_SHA`, `dev` nếu build

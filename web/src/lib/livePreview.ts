@@ -1412,8 +1412,15 @@ class FrontmatterWidget extends WidgetType {
     return true;
   }
   toDOM(view: EditorView) {
+    // `shell` is the box CodeMirror measures, so the widget's vertical spacing lives
+    // on it as PADDING: the height oracle only ever sees border-box rects, and space
+    // contributed by a vertical `margin` here would be invisible to it — every click
+    // below the properties block then resolved one line too low.
+    const shell = document.createElement('div');
+    shell.className = 'cm-properties';
     const box = document.createElement('div');
-    box.className = 'properties cm-properties';
+    box.className = 'properties';
+    shell.appendChild(box);
 
     // Re-find the current frontmatter range and replace it with fresh YAML.
     const commit = (props: Prop[]) => {
@@ -1878,7 +1885,7 @@ class FrontmatterWidget extends WidgetType {
       for (const el of box.querySelectorAll('[contenteditable]')) el.removeAttribute('contenteditable');
       for (const inp of box.querySelectorAll('input')) (inp as HTMLInputElement).disabled = true;
     }
-    return box;
+    return shell;
   }
 }
 
@@ -2655,10 +2662,27 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
  * otherwise swallow the first click, which is why editing a heading "took
  * several clicks". We only act on a plain click (no shift = not range-extending)
  * and let CodeMirror still handle drag-select normally.
+ *
+ * Two things can still move the caret away from the clicked row, and both are
+ * handled here: CodeMirror leaves it put when `posAtCoords` has no precise answer
+ * (the padding of a tall heading line-box — fixed on mousedown), and the browser's
+ * own contenteditable caret placement picks a *neighbouring* line when the click
+ * lands in the blank part of a line whose only content is a widget, an image line
+ * say (re-asserted on mouseup, once the native handling has run). Widgets that own
+ * their interaction are left untouched.
  */
+const INTERACTIVE_WIDGET =
+  'input, textarea, select, audio, video, iframe, [contenteditable="true"]:not(.cm-content), ' +
+  '.cm-table-wrap, .cm-properties, .cm-media-wrap, .cm-note-embed';
+let plainClickAt: { x: number; y: number } | null = null;
+
 export const editorClickFix = EditorView.domEventHandlers({
   mousedown(event, view) {
-    if (event.button !== 0 || event.shiftKey || event.detail > 1) return false;
+    if (event.button !== 0 || event.shiftKey || event.detail > 1) {
+      plainClickAt = null;
+      return false;
+    }
+    plainClickAt = { x: event.clientX, y: event.clientY };
     // `precise: false` returns the CLOSEST position and never null, so clicking
     // anywhere on a tall heading line-box (incl. its padding, where the default
     // posAtCoords returns null and CM leaves the caret put) still moves the caret
@@ -2667,7 +2691,88 @@ export const editorClickFix = EditorView.domEventHandlers({
     view.dispatch({ selection: { anchor: pos } });
     return false; // let CodeMirror handle focus/drag normally too
   },
+  mouseup(event, view) {
+    const start = plainClickAt;
+    plainClickAt = null;
+    if (!start || event.button !== 0 || event.shiftKey || event.detail > 1) return false;
+    // A drag: keep the selection CodeMirror built.
+    if (Math.abs(event.clientX - start.x) > 3 || Math.abs(event.clientY - start.y) > 3) return false;
+    const target = event.target as HTMLElement | null;
+    if (target && typeof target.closest === 'function' && target.closest(INTERACTIVE_WIDGET)) return false;
+    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }, false);
+    if (pos != null && pos !== view.state.selection.main.head) view.dispatch({ selection: { anchor: pos } });
+    return false;
+  },
 });
+
+/**
+ * Re-measure when media inside the editor finishes loading. CodeMirror's height
+ * oracle only sees the DOM as it is during a measure pass and it does not listen for
+ * `load`/`error` events, so an attachment that arrives afterwards leaves the height
+ * map short by its own height — every click below it then resolves one or two lines
+ * too low until something else forces a re-measure (a keystroke, or a scroll).
+ */
+export const mediaLoadRemeasure = ViewPlugin.fromClass(
+  class {
+    private readonly onLoad = () => this.view.requestMeasure();
+    constructor(private readonly view: EditorView) {
+      view.dom.addEventListener('load', this.onLoad, true);
+      view.dom.addEventListener('error', this.onLoad, true);
+    }
+    destroy() {
+      this.view.dom.removeEventListener('load', this.onLoad, true);
+      this.view.dom.removeEventListener('error', this.onLoad, true);
+    }
+  },
+);
+
+/**
+ * Dev-only guard for exactly the bug above: CodeMirror's height map must describe what
+ * the editor actually rendered. When the map is short, some CSS inside the editor
+ * contributes vertical space the oracle cannot see — a `margin` on an editor block is
+ * the usual cause — and every click below the gap lands a line or two low. Silence in
+ * a production build.
+ */
+export const livePreviewGeometryGuard = import.meta.env.DEV
+  ? ViewPlugin.fromClass(
+      class {
+        private timer: ReturnType<typeof setTimeout> | null = null;
+        private warned = 0;
+        constructor(private readonly view: EditorView) {
+          this.schedule();
+        }
+        update() {
+          this.schedule();
+        }
+        destroy() {
+          if (this.timer) clearTimeout(this.timer);
+        }
+        private schedule() {
+          if (this.timer) clearTimeout(this.timer);
+          this.timer = setTimeout(() => this.verify(), 400);
+        }
+        private verify() {
+          this.timer = null;
+          const view = this.view;
+          // An attachment still in flight legitimately changes the height afterwards.
+          if ([...view.contentDOM.querySelectorAll('img')].some((img) => !img.complete)) {
+            this.schedule();
+            return;
+          }
+          // Both include the content padding, so the difference is the unmeasured space.
+          const drift = view.contentDOM.scrollHeight - view.contentHeight;
+          if (drift > 4 && Math.abs(drift - this.warned) > 1) {
+            this.warned = drift;
+            console.warn(
+              `[webobsidian] the editor's height map is ${drift.toFixed(1)}px short of the rendered ` +
+                'content, so clicks below that gap land on the wrong line. Vertical margins inside ' +
+                '.cm-content are invisible to CodeMirror — use padding (README › Live Preview geometry).',
+            );
+          }
+        }
+      },
+    )
+  : [];
 
 export const livePreviewTheme = EditorView.baseTheme({
   // Heading sizes/weights come from the stylesheet (.cm-s-obsidian .HyperMD-header-N,
@@ -2683,8 +2788,11 @@ export const livePreviewTheme = EditorView.baseTheme({
     lineHeight: 'var(--line-height-tight)',
     letterSpacing: '-0.015em',
     color: 'var(--text-normal)',
-    margin: '0 0 0.5em',
-    padding: '0',
+    // Space below the title is PADDING, not a margin: CodeMirror's height oracle
+    // measures border-box rects only, so margins between blocks are invisible to it
+    // and every click lands ~1 line too low (see README › Live Preview geometry).
+    margin: '0',
+    padding: '0 0 0.5em',
   },
   '.cm-em': { fontStyle: 'italic' },
   '.cm-strike': { textDecoration: 'line-through' },
@@ -2721,7 +2829,10 @@ export const livePreviewTheme = EditorView.baseTheme({
   },
   '.cm-task-checkbox': { verticalAlign: 'middle', marginRight: '4px', cursor: 'pointer' },
   '.cm-embed-image': { maxWidth: '100%', borderRadius: '6px', display: 'block', margin: '6px 0' },
-  '.cm-properties': { margin: '4px 0 18px' },
+  '.cm-properties': { padding: '0 0 18px' },
+  // The measured shell above owns the block's vertical spacing (padding); the visual
+  // box inside it keeps its own border-bottom/padding but must not re-add a margin.
+  '.cm-properties > .properties': { margin: '0' },
   // Compound `.cm-line.cm-blockquote` selector beats CodeMirror's own `.cm-line`
   // padding rule (equal specificity, declared later) so the gap actually applies —
   // otherwise text sits flush against the bar. Blockquote: 2px accent bar +
@@ -2745,7 +2856,17 @@ export const livePreviewTheme = EditorView.baseTheme({
   },
   '.cm-table th': { fontWeight: '600', background: 'var(--bg-secondary)' },
   // Interactive table editor (Obsidian-style): click-to-edit cells + hover controls.
-  '.cm-table-wrap': { position: 'relative', display: 'inline-block', margin: '8px 18px 18px 0' },
+  // `display: block` + `width: fit-content` shrink-wraps the table like the old
+  // `inline-block` did, but without the anonymous line box that added ~7px of
+  // unmeasurable space below the widget (inline-blocks sit on the text baseline).
+  '.cm-table-wrap': {
+    position: 'relative',
+    display: 'block',
+    width: 'fit-content',
+    maxWidth: '100%',
+    margin: '0 18px 0 0',
+    padding: '8px 0 18px',
+  },
   '.cm-cell-edit': { outline: 'none', cursor: 'text', minWidth: '1em' },
   '.cm-cell-edit:focus': { boxShadow: 'inset 0 0 0 2px var(--interactive-accent)', background: 'var(--bg-primary)' },
   '.cm-table-addcol, .cm-table-addrow': {
@@ -2765,7 +2886,7 @@ export const livePreviewTheme = EditorView.baseTheme({
     transition: 'opacity 0.1s',
   },
   '.cm-table-addcol': { top: '0', right: '-16px', width: '14px', height: '100%' },
-  '.cm-table-addrow': { left: '0', bottom: '-16px', height: '14px', width: '100%' },
+  '.cm-table-addrow': { left: '0', bottom: '2px', height: '14px', width: '100%' },
   '.cm-table-wrap:hover .cm-table-addcol, .cm-table-wrap:hover .cm-table-addrow': { opacity: '1' },
   // Column handle (top strip of each header cell) + row handle (left strip of first cell).
   '.cm-col-handle': { position: 'absolute', top: '0', left: '0', right: '0', height: '5px', cursor: 'pointer' },
@@ -2779,7 +2900,7 @@ export const livePreviewTheme = EditorView.baseTheme({
   },
   // Raw embedded HTML (e.g. CKEditor/Trilium tables) — table metrics match the
   // reading view (4px 10px cells, semibold header) so both modes look alike.
-  '.cm-html-block': { margin: '6px 0' },
+  '.cm-html-block': { margin: '0', padding: '6px 0' },
   '.cm-html-block table': { borderCollapse: 'collapse', margin: '4px 0', width: 'auto' },
   '.cm-html-block th, .cm-html-block td': {
     border: '1px solid var(--bg-modifier-border)',

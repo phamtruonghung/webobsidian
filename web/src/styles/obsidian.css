@@ -651,8 +651,11 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 /* Mermaid */
 .cm-mermaid { text-align: center; padding: 8px 0; }
 .cm-mermaid.mod-error { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-smaller); }
-/* ```html "Render HTML" toggle (block widget around the code fence) */
-.cm-html-preview { white-space: normal; margin: 4px 0 8px; }
+/* ```html "Render HTML" toggle (block widget around the code fence).
+   Vertical spacing is padding, never margin: CodeMirror's height oracle measures
+   border-box rects only, so a margin here would be invisible to it and clicks would
+   resolve one line too low (see README › Live Preview geometry). */
+.cm-html-preview { white-space: normal; margin: 0; padding: 4px 0 8px; }
 /* When rendered, break out of the readable-line-width column to full editor width.
    Content is centred on the scroller, so left:50% + translateX(-50%) re-centres a
    scroller-width box (its px width is set in JS) regardless of column padding. */
