@@ -120,6 +120,56 @@ export function isOverdue(task: TaskRecord, today: string): boolean {
 }
 
 /**
+ * Statuses hidden by default in the Tasks view (issue #39): finished work should
+ * not clutter the board or the timeline the moment you open them. Everything
+ * else — including unmapped statuses — stays visible until the user says
+ * otherwise; silently hiding data nobody opted out of would be worse than clutter.
+ */
+export const DEFAULT_HIDDEN_STATUSES: readonly string[] = ['done'];
+
+export interface StatusFacet {
+  id: string;
+  label: string;
+  canonical: boolean;
+  count: number;
+}
+
+/**
+ * Every status worth offering as a filter: the four canonical ones first (in
+ * board order, even at count 0, so the control does not jump around), then the
+ * unmapped values present in the data, alphabetically.
+ */
+export function statusFacets(tasks: TaskRecord[]): StatusFacet[] {
+  const counts = new Map<string, number>();
+  for (const t of tasks) {
+    const id = columnIdFor(t);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  const out: StatusFacet[] = CANONICAL_STATUSES.map((c) => ({
+    id: c.id,
+    label: c.label,
+    canonical: true,
+    count: counts.get(c.id) ?? 0,
+  }));
+  for (const id of [...counts.keys()].filter((i) => !CANONICAL_IDS.has(i)).sort((a, b) => a.localeCompare(b))) {
+    out.push({ id, label: id, canonical: false, count: counts.get(id) ?? 0 });
+  }
+  return out;
+}
+
+/** Cards whose status is not in `hidden` (resolved through the alias table). */
+export function filterByStatus(tasks: TaskRecord[], hidden: readonly string[]): TaskRecord[] {
+  if (hidden.length === 0) return tasks;
+  const hide = new Set(hidden);
+  return tasks.filter((t) => !hide.has(columnIdFor(t)));
+}
+
+/** How many cards the status filter is currently hiding. */
+export function hiddenByStatus(tasks: TaskRecord[], hidden: readonly string[]): number {
+  return tasks.length - filterByStatus(tasks, hidden).length;
+}
+
+/**
  * Optimistic move: returns a new array with `path`'s status/statusRaw set to
  * `statusId` (the target column's id — canonical id, or the raw label for an
  * unknown column, since an unknown column's id IS its raw label).

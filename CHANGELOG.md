@@ -34,6 +34,14 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   the `open` bar is lifted on dark themes. *(issue #35)*
 
 ### Added
+- **Tasks view: filter by status, with Done hidden by default.** A "Status" row of chips (canonical
+  four in column order, then any unmapped statuses present), each with its card count; `done` starts
+  hidden, everything else — including unmapped values — stays visible. The row reports what it is
+  hiding (`1 hidden — show all`, one click to clear) and the task count reflects what is shown.
+  **Every column still renders**, including a filtered-out Done: it stays a drop target so a card can
+  still be dragged to completion, with `+N hidden` in its header and the reason in its body. The
+  timeline shares the same filter. *(PRD 1.13 - FR-15, issue #39)*
+
 - **Tasks timeline (Gantt)** — second mode of the Tasks view (`/tasks?mode=timeline`, command
   palette "Open tasks timeline"): one bar per `type: task` note from `raised` (fallback `created`)
   to `due`; a task with no usable due date is dashed and open-ended, running to today. Day/week/

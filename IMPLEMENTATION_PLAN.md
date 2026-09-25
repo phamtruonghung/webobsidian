@@ -577,7 +577,27 @@ Cập nhật lần cuối: 2026-09-25 (FR-16 — Timeline/Gantt: restyle giao di
       thuộc `[lineX, pxPerDay]`, observe container **và** grid, nhường người dùng khi họ tự cuộn/đổi
       zoom; test DOM khẳng định đường hôm nay phải **nằm trong vùng nhìn thấy**.
 
+## Phase 36 — Tasks view: lọc theo trạng thái, mặc định ẩn Done — FR-15 (issue #39)
+- [x] M36.1 `web/src/lib/tasks.ts`: `DEFAULT_HIDDEN_STATUSES` (chỉ `done`), `statusFacets` (4 chuẩn theo
+      thứ tự cột kể cả 0 thẻ + giá trị lạ theo alphabet, kèm số thẻ), `filterByStatus` (resolve alias
+      trước khi ẩn), `hiddenByStatus`; unit test trong `web/tests/tasks.test.ts` (alias `closed`→done,
+      giá trị lạ, thẻ thiếu `status`, số đếm).
+- [x] M36.2 TasksView: hàng "Status" với chip có số thẻ + `aria-pressed`, mặc định ẩn `done`;
+      `visibleTasks` cho timeline; mọi cột vẫn vẽ với `+N hidden` và lý do trong thân cột (cột Done giữ
+      vai trò chỗ thả); nút `N hidden — show all`.
+- [x] M36.3 Kiểm chứng headless: Done ẩn mặc định / các trạng thái khác (kể cả `escalated`) hiện; bật
+      Done → 10 thanh, tắt → 9; cột Done rỗng với `+1 hidden`; hình học thanh vẫn khớp kỳ vọng Python
+      (9/9); 51/51 check PASS.
+
 ### Nhật ký tiến độ
+- 2026-09-25 (FR-15 — Tasks view: lọc theo trạng thái, mặc định ẩn Done, issue #39): người dùng yêu cầu
+  thêm chức năng lọc theo trạng thái và mặc định không hiện Done. Quyết định khung (ghi ở PRD FR-15):
+  chip theo trạng thái kèm số thẻ ở hàng riêng; mặc định chỉ ẩn `done`, giá trị lạ vẫn hiện; **cột Done
+  vẫn được vẽ dù thẻ bị ẩn** vì nếu bỏ cột thì không còn chỗ thả để hoàn thành task — header ghi
+  `+N hidden`; hàng lọc ghi `N hidden — show all` để không có gì bị ẩn âm thầm. Hàm thuần mới trong
+  `web/src/lib/tasks.ts` + 4 test. **Kiểm chứng**: `npm test` 143 server + 96 web; headless DOM **51/51
+  PASS** (thêm 5 check cho bộ lọc, gồm bật/tắt Done đổi số thanh 9↔10 và cột Done giữ chỗ thả);
+  ảnh chụp light/dark/board đã soi lại. M36.1–M36.3 `[x]`.
 - 2026-09-25 (FR-16 — Timeline: cửa sổ 8 tuần theo bề rộng, issue #37): người dùng yêu cầu "trong
   timeframe Week muốn thấy task của ít nhất 8 tuần tới, tuỳ kích thước màn hình". Đo trước khi sửa:
   ở 16px/ngày cố định thì 1440px → 10.6 tuần, nhưng 1000px (mở cả hai sidebar) → **4.4 tuần**, 390px →

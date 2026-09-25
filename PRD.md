@@ -1,7 +1,14 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.12 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Phiên bản: 1.13 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Changelog 1.13 (FR-15 — Tasks view: lọc theo trạng thái, mặc định ẩn `done`, issue #39): thêm
+> **hàng lọc Status** — mỗi trạng thái một chip kèm số thẻ (4 trạng thái chuẩn theo thứ tự cột, kể cả
+> khi 0 thẻ, rồi tới các giá trị lạ đang có). **Mặc định ẩn `done`**; giá trị lạ vẫn hiện (không ẩn dữ
+> liệu người dùng chưa yêu cầu ẩn). Không có gì bị ẩn âm thầm: hàng lọc ghi rõ "N hidden — show all"
+> (một click để bỏ lọc) và số thẻ trên thanh công cụ phản ánh phần đang hiện. **Cột Done vẫn được vẽ**
+> dù thẻ bị ẩn — giữ nó làm chỗ thả để còn kéo thẻ sang Done được, header ghi `+N hidden`, thân cột ghi
+> rõ lý do. Timeline dùng chung bộ lọc này.
 > Changelog 1.12 (FR-16 — Timeline: tuần hiển thị tối thiểu 8 tuần tới, issue #37): zoom **Week**
 > nay **theo bề rộng thật của trục** — `pxPerDay = clamp(usable / (56/0.88), 4, 20)` với 12% bề ngang
 > giữ lại phía sau hôm nay — nên **8 tuần tới luôn nằm trong màn hình** ở mọi bề rộng khả thi
@@ -520,6 +527,14 @@ Timeline/Gantt dựng trên cùng shell Tasks view).
   thêm dependency) **và** menu chuột phải/nút "⋯" → "Move to → <tên cột>" cho mọi cột khác (fallback
   cho chạm/không kéo-thả). Optimistic update: sai thì khôi phục cột cũ + `notify('Could not move
   "<title>": <message>')`.
+- **Lọc theo trạng thái (issue #39)**: hàng "Status" riêng dưới thanh lọc, mỗi trạng thái một chip kèm
+  số thẻ — 4 chuẩn theo thứ tự cột (luôn hiện, kể cả 0 thẻ, để control không nhảy vị trí) rồi tới các giá
+  trị lạ theo alphabet. Click để ẩn/hiện; chip đang ẩn bị làm mờ + gạch ngang nhãn. **Mặc định chỉ ẩn
+  `done`** — giá trị lạ vẫn hiện. Khi có thẻ bị ẩn, hàng này hiện `N hidden — show all` (một click xoá
+  lọc) và số thẻ trên thanh công cụ chỉ tính phần đang hiện. **Mọi cột vẫn được vẽ** kể cả khi trạng thái
+  đó bị ẩn: cột Done phải còn làm chỗ thả, nếu không sẽ không thể hoàn thành task bằng cách kéo; header
+  hiện `+N hidden`, thân cột hiện "All hidden by the status filter". Timeline lọc cùng bộ trạng thái.
+  Bộ lọc là state của component (như folder/priority/owner/text), không persist và không lên URL.
 - **Bộ lọc**: phạm vi thư mục (mặc định "Whole vault"), priority, owner, free-text theo title. Nút
   Refresh thủ công + auto-refresh (debounce ~500ms) khi WebSocket báo thay đổi `.md` trong phạm vi lọc
   (sự kiện `wo-fs` mà `App.tsx` đã phát cho tree). Empty state giải thích quy ước `type: task` và link
