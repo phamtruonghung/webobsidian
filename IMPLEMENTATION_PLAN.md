@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-25 (FR-15 — Tasks view: Kanban board trên ghi chú `type: task`, issue #31)
+Cập nhật lần cuối: 2026-09-25 (FR-16 — Tasks view: Timeline/Gantt, issue #32; kèm kiểm chứng deploy của FR-15)
 
 ---
 
@@ -529,10 +529,51 @@ Cập nhật lần cuối: 2026-09-25 (FR-15 — Tasks view: Kanban board trên 
 - [x] M34.10 Kiểm chứng thật trên vault fixture: `/tasks` render đúng 6 note `Wiki/tasks/`, cột lạ/thiếu
       status đúng quy tắc; kéo thẻ đổi `status:`/`updated:` trong file thật (paste `git diff`); ghi lỗi
       (409/mất mạng) → rollback + notify; `curl` `GET /api/tasks` và `GET /api/v1/tasks`.
-- [ ] M34.11 Kiểm chứng deploy: sau khi merge, LXC 107 `/healthz.build` == merge commit và `/tasks` được
-      phục vụ từ build đó (paste curl output) — theo runbook docs/DEPLOYMENT.md.
+- [x] M34.11 Kiểm chứng deploy: sau khi merge `a1158ad`, CI xanh → `Deploy (LXC 107)` success;
+      `curl /healthz` → `build=a1158ad` (== merge commit), `/tasks` HTTP 200, bundle deploy chứa
+      `tasks://view`; `GET /api/v1/tasks` bằng key scope `read` trả **6 task thật** của vault (template
+      bị loại, alias `waiting`→`blocked` đúng); 401 khi thiếu key. Xem comment kiểm chứng trên issue #31.
+
+## Phase 35 — Tasks view: Timeline/Gantt — FR-16 (issue #32)
+- [x] M35.1 `web/src/lib/gantt.ts`: module thuần trên **chỉ số ngày UTC** — `parseDay`/`dayToISO`,
+      `barFor` (raised→created→hôm nay; thiếu `due` → mở; kẹp `due` < start), `computeRange` (pad 3 ngày,
+      luôn chứa hôm nay, rỗng → ±15 ngày), `barGeometry` (bao gồm cả hai đầu, floor `MIN_BAR_PX`),
+      `todayX`, `ticksFor` (Day/Week/Month + fallback 1 nhãn). Unit test `web/tests/gantt.test.ts`.
+- [x] M35.2 `web/src/components/GanttChart.tsx`: thanh theo trạng thái (màu cột board, lạ →
+      `status-unknown`), badge priority, quá hạn viền đỏ, mở nét đứt, đường hôm nay, cột nhãn sticky +
+      nhãn click mở note, zoom Day/Week/Month + nút cuộn về hôm nay, tooltip title·status·owner·ngày.
+      CSS `.gantt*` trong `web/src/styles/obsidian.css` (gridline theo `--gantt-day-w`).
+- [x] M35.3 Nối vào TasksView: `mode` đọc từ store, nút Timeline hiện (bỏ `hidden`), Board|Timeline
+      chuyển tại chỗ; command palette thêm "Open tasks timeline".
+- [x] M35.4 Deep link `/tasks?mode=timeline`: `tasksMode` trong store (không persist) + `pathToUrl(path,
+      tasksMode)` + `modeFromUrl(pathname, search)`; **sửa bug** URL bị `urlsync` ghi đè thành `/tasks`
+      khi restore (rơi âm thầm về board) — test hồi quy trong `web/tests/urlsync.test.ts` + kiểm chứng DOM
+      "reload giữ timeline".
+- [x] M35.5 Kiểm chứng thật trên vault fixture (10 note = 6 note thật + 4 fixture biên): headless Chromium
+      so **hình học từng thanh với kỳ vọng tính độc lập bằng Python** từ frontmatter (10/10 khớp), đường
+      hôm nay, nhãn trục, 3 mức zoom, lớp overdue/open-ended/unknown, click thanh + nhãn mở note, toggle,
+      reload giữ timeline, cuộn ngang ở 390px, không lỗi console — 22/22 PASS.
+- [ ] M35.6 Kiểm chứng deploy: sau merge, LXC 107 `/healthz.build` == merge commit và `/tasks?mode=timeline`
+      được phục vụ từ build đó (paste curl output) — theo runbook docs/DEPLOYMENT.md.
+- [ ] M35.7 Người dùng kiểm tra bằng mắt trên deployment thật (kéo thả của FR-15 + Timeline của FR-16).
 
 ### Nhật ký tiến độ
+- 2026-09-25 (FR-16 — Tasks view: Timeline/Gantt, issue #32): **Phase 35**. Bối cảnh: phiên Claude Code
+  (opus) hết hạn mức giữa lúc lập plan nên phần code do agent dự phòng làm tiếp, nhánh
+  `feat/tasks-gantt-timeline` từ `main` (đã có FR-15). Quyết định khung (ghi ở PRD FR-16): thanh
+  `raised`→`due` không thêm field frontmatter nào; module thuần `web/src/lib/gantt.ts` tính trên **chỉ
+  số ngày UTC** để DST/múi giờ không làm lệch ngày; dải tự fit + pad 3 ngày, luôn chứa hôm nay; độ dài
+  thanh bao gồm cả hai đầu + floor 8px; đường hôm nay đánh dấu *đầu* ngày hôm nay. **Hai bug thật do
+  kiểm chứng DOM phát hiện và đã sửa**: (1) `urlsync` là nơi duy nhất ghi URL và dựng URL từ `activePath`,
+  nên `/tasks?mode=timeline` bị ghi đè thành `/tasks` lúc restore → **rơi âm thầm về board**; sửa bằng
+  `pathToUrl(path, tasksMode)` + `modeFromUrl` (URL là nguồn sự thật lúc load) và test hồi quy reload;
+  (2) persist `tasksMode` trong `PERSIST_KEYS` làm state khôi phục (`board`) đè mode URL yêu cầu → bỏ
+  persist. Nhãn dòng được đổi thành `<button>` (mở note) vì đó là vùng chạm lớn nhất trên mobile.
+  **Kiểm chứng**: `npm test` xanh (16 test gantt + 4 test URL/store mới); typecheck + build xanh; server
+  trên vault fixture (6 note thật + 4 fixture biên): 22/22 check DOM PASS, gồm so hình học từng thanh với
+  kỳ vọng Python độc lập, zoom Day/Week/Month (2880/1152/288 px), reload giữ timeline, 390px cuộn ngang.
+  M35.1–M35.5 `[x]`; M35.6 (deploy) + M35.7 (kiểm tra bằng mắt) chờ merge. Đồng thời tick **M34.11**:
+  FR-15 đã deploy thật (`build=a1158ad`, 6 task thật qua `/api/v1/tasks`).
 - 2026-09-25 (FR-15 — Tasks view: Kanban board trên ghi chú `type: task`, issue #31): mở **Phase 34**
   theo plan 2 workstream song song (server: `server/**` + `deploy/smoke.sh` + `docs/AGENT_API.md`; web:
   `web/**`) cộng workstream docs (PRD/PLAN/CHANGELOG/README) chạy song song trong cùng phiên. Quyết định
