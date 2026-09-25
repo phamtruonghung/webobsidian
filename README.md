@@ -475,6 +475,23 @@ reappears on an editor block, and (dev builds only) `livePreviewGeometryGuard` l
 warning when the height map is shorter than the rendered content. Attachments that load after
 layout are handled by `mediaLoadRemeasure`, which re-measures on `load`/`error`.
 
+### CodeMirror's own colours must be re-themed
+
+This app themes through CSS variables on a `.theme-*` wrapper and never enables CodeMirror's
+`darkTheme` facet, so anything CodeMirror hard-codes for light mode stays light on every theme.
+Two of those are user-visible and are overridden in `obsidian.css`:
+
+- **The caret.** `drawSelection()` hides the native caret (`caret-color: transparent !important`)
+  and paints `.cm-cursor`, whose border is hard-coded `black` (`&dark` would be `#ddd`) — on a dark
+  theme the caret was black on near-black. `.cm-editor .cm-cursor, .cm-editor .cm-dropCursor`
+  take `var(--text-normal)`.
+- **The Find & Replace panel** (`.cm-panels`, `Ctrl+F`): hard-coded `#f5f5f5` with browser-default
+  white inputs; now themed with palette variables.
+
+Rule of thumb: when a CodeMirror default looks wrong on a theme, override it with a palette
+variable — never with a literal colour. `web/tests/editorTheme.test.ts` enforces this for the
+caret and the panel.
+
 ---
 
 ## 🔒 Security notes
