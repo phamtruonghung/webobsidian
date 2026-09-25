@@ -9,6 +9,7 @@ import {
   computeRange,
   DAY_MS,
   dayGridlines,
+  daysAheadVisible,
   dayToISO,
   dayToShort,
   EMPTY_RANGE_HALF_DAYS,
@@ -17,12 +18,20 @@ import {
   monthSpans,
   isRealDate,
   MIN_BAR_PX,
+  MIN_FUTURE_DAYS,
+  MIN_LABEL_GAP_PX,
   PAD_DAYS,
+  SHORT_LABEL_GAP_PX,
   parseDay,
   rangeDays,
   sortBars,
   ticksFor,
+  WEEK_AHEAD_DAYS,
+  WEEK_MAX_PX_PER_DAY,
+  WEEK_SHORT_LABEL_SPACING_PX,
+  WEEK_MIN_PX_PER_DAY,
   weekendSpans,
+  weekZoomPxPerDay,
   todayX,
   xForDay,
   zoomLevel,
@@ -115,26 +124,81 @@ test('computeRange pads both sides and always contains today', () => {
   );
   const r = computeRange(bars, TODAY);
   assert.equal(dayToISO(r.from), '2026-09-07', 'earliest start minus the pad');
-  assert.equal(dayToISO(r.to), '2026-10-28', 'latest due plus the pad');
-  assert.equal(rangeDays(r), 52);
+  assert.equal(dayToISO(r.to), '2026-11-29', 'eight weeks of runway past today, plus the pad');
   assert.equal(PAD_DAYS, 3);
+  assert.equal(MIN_FUTURE_DAYS, 56);
 });
 
 test('computeRange keeps today inside a range made only of past or future tasks', () => {
   const past = computeRange(barsFor([task({ raised: '2026-01-01', due: '2026-01-05' })], TODAY), TODAY);
   assert.ok(past.from <= TODAY && TODAY <= past.to, 'today must be inside a fully-past range');
-  assert.equal(dayToISO(past.to), '2026-10-04');
+  assert.equal(dayToISO(past.to), '2026-11-29', 'the runway is drawn even with nothing ahead of today');
+  assert.ok(past.to - TODAY >= MIN_FUTURE_DAYS, 'at least eight weeks ahead');
 
   const future = computeRange(barsFor([task({ raised: '2026-12-01', due: '2026-12-05' })], TODAY), TODAY);
-  assert.ok(future.from <= TODAY && TODAY <= future.to, 'today must be inside a fully-future range');
+  assert.ok(future.from <= TODAY && future.to > parseDay('2026-12-05')!, 'a task beyond the runway still fits');
   assert.equal(dayToISO(future.from), '2026-09-28');
 });
 
-test('computeRange with no bars is a fixed window around today', () => {
+test('computeRange with no bars is a fixed window around today, runway included', () => {
   const r = computeRange([], TODAY);
   assert.equal(r.from, TODAY - EMPTY_RANGE_HALF_DAYS);
-  assert.equal(r.to, TODAY + EMPTY_RANGE_HALF_DAYS);
+  assert.equal(r.to, TODAY + MIN_FUTURE_DAYS + PAD_DAYS);
   assert.equal(EMPTY_RANGE_HALF_DAYS, 15);
+});
+
+test('week zoom scale fits eight weeks ahead, clamped for extreme widths', () => {
+  // A wide pane: on target (eight weeks ahead + 12% of context behind today).
+  const wide = weekZoomPxPerDay(1188);
+  assert.ok(Math.abs(daysAheadVisible(1188, wide) - WEEK_AHEAD_DAYS) < 0.01, `wide pane shows ${daysAheadVisible(1188, wide)} days ahead`);
+  // An ultrawide pane: the ceiling applies and therefore shows MORE than eight weeks.
+  const ultrawide = weekZoomPxPerDay(1400);
+  assert.equal(ultrawide, WEEK_MAX_PX_PER_DAY, 'the ceiling holds a week back from stretching');
+  assert.ok(daysAheadVisible(1400, ultrawide) > WEEK_AHEAD_DAYS, 'ultrawide exceeds the target');
+  // A laptop pane: still on target.
+  const laptop = weekZoomPxPerDay(600);
+  assert.ok(Math.abs(daysAheadVisible(600, laptop) - WEEK_AHEAD_DAYS) < 0.01, `laptop shows ${daysAheadVisible(600, laptop)} days ahead`);
+  // A 390px phone: the floor applies, because eight weeks of legible week labels
+  // do not physically fit in ~258px of axis. Honest rather than pretend.
+  // A 390px phone leaves ~258px of axis: just above the floor, still eight weeks.
+  assert.ok(weekZoomPxPerDay(258) >= WEEK_MIN_PX_PER_DAY);
+  const phone = daysAheadVisible(258, weekZoomPxPerDay(258));
+  assert.ok(phone >= WEEK_AHEAD_DAYS - 1, `phone shows ${phone.toFixed(1)} days ahead`);
+  // A truly squeezed pane (both sidebars plus a narrow window) hits the floor;
+  // that is the only case where eight weeks is not achievable and the scale stops
+  // shrinking rather than becoming illegible.
+  assert.equal(weekZoomPxPerDay(200), WEEK_MIN_PX_PER_DAY);
+  assert.ok(daysAheadVisible(200, WEEK_MIN_PX_PER_DAY) < WEEK_AHEAD_DAYS, 'the floor is a real limit, stated rather than hidden');
+  // A laptop whose pane is squeezed by an open sidebar still gets eight weeks.
+  assert.ok(daysAheadVisible(272, weekZoomPxPerDay(272)) >= WEEK_AHEAD_DAYS - 1, 'a narrow pane still targets eight weeks');
+  // Degenerate inputs never produce a silly scale.
+  assert.equal(weekZoomPxPerDay(0), WEEK_MAX_PX_PER_DAY);
+  assert.equal(weekZoomPxPerDay(-5), WEEK_MAX_PX_PER_DAY);
+  // Zoom ordering still holds: Month < Week < Day.
+  assert.ok(zoomLevel('month').pxPerDay < WEEK_MIN_PX_PER_DAY, 'Month stays below the Week floor');
+  assert.ok(WEEK_MAX_PX_PER_DAY < zoomLevel('day').pxPerDay);
+});
+
+test('week labels fit their spacing: dates when roomy, day numbers when dense', () => {
+  const r = { from: parseDay('2026-08-03')!, to: parseDay('2026-10-05')! };
+  // Roomy (16px/day → 112px between Mondays): a date per Monday.
+  const roomy = ticksFor(r, 'week', 16);
+  assert.ok(roomy.length > 0);
+  assert.ok(roomy.every((t) => t.label !== null));
+  assert.match(roomy[0].label!, /^[A-Z][a-z]{2} \d+$/, 'reads as a date when there is room');
+  // Dense (4px/day → 28px between Mondays): day numbers only, every Monday kept.
+  const dense = ticksFor(r, 'week', 4);
+  assert.equal(dense.length, roomy.length, 'the same Mondays are still ticks');
+  assert.ok(dense.every((t) => t.major), 'and still carry their gridlines');
+  assert.ok(
+    dense.every((t) => t.label === null || /^\d{2}$/.test(t.label)),
+    `dense labels are day numbers: ${dense.map((t) => t.label).join(',')}`,
+  );
+  assert.ok(dense.filter((t) => t.label !== null).length >= Math.ceil(dense.length / 2), 'most Mondays keep a label');
+  // Absurdly dense (2px/day → 14px): the spacing rule starts dropping them.
+  const crushed = ticksFor(r, 'week', 2);
+  assert.ok(crushed.filter((t) => t.label !== null).length < crushed.length, 'below the short-label gap, labels drop');
+  assert.ok(SHORT_LABEL_GAP_PX < MIN_LABEL_GAP_PX);
 });
 
 test('geometry: inclusive duration, offset by the padded range, floored at MIN_BAR_PX', () => {

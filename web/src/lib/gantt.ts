@@ -19,8 +19,35 @@ export interface ZoomLevel {
 export const ZOOMS: ZoomLevel[] = [
   { id: 'day', label: 'Day', pxPerDay: 40 },
   { id: 'week', label: 'Week', pxPerDay: 16 },
-  { id: 'month', label: 'Month', pxPerDay: 4 },
+  { id: 'month', label: 'Month', pxPerDay: 3 },
 ];
+
+/**
+ * Pixels per day for Week zoom, given the space the axis really has (issue #37).
+ *
+ * The point of Week zoom is the near future, so the scale is chosen to fit
+ * `WEEK_AHEAD_DAYS` ahead of today plus a small slice of past context, then
+ * clamped: wide screens stop at `WEEK_MAX_PX_PER_DAY` and therefore show *more*
+ * than 8 weeks, narrow ones go down to `WEEK_MIN_PX_PER_DAY` (about 7.4 weeks at
+ * a 390px phone, where eight weeks of legible week labels do not physically fit).
+ */
+export function weekZoomPxPerDay(
+  usableWidth: number,
+  aheadDays = WEEK_AHEAD_DAYS,
+  contextFraction = WEEK_CONTEXT_FRACTION,
+  min = WEEK_MIN_PX_PER_DAY,
+  max = WEEK_MAX_PX_PER_DAY,
+): number {
+  if (!(usableWidth > 0)) return max;
+  const daysOnScreen = aheadDays / (1 - contextFraction);
+  return Math.min(max, Math.max(min, usableWidth / daysOnScreen));
+}
+
+/** How many days ahead of today are on screen at this scale. */
+export function daysAheadVisible(usableWidth: number, pxPerDay: number, contextFraction = WEEK_CONTEXT_FRACTION): number {
+  if (pxPerDay <= 0) return 0;
+  return (usableWidth * (1 - contextFraction)) / pxPerDay;
+}
 
 export function zoomLevel(zoom: Zoom): ZoomLevel {
   return ZOOMS.find((z) => z.id === zoom) ?? ZOOMS[0];
@@ -28,6 +55,22 @@ export function zoomLevel(zoom: Zoom): ZoomLevel {
 
 /** Empty space kept on each side of the fitted range. */
 export const PAD_DAYS = 3;
+/** Runway the timeline always draws ahead of today: 8 weeks (issue #37). */
+export const MIN_FUTURE_DAYS = 56;
+/** Week zoom targets this many days ahead of today on screen. */
+export const WEEK_AHEAD_DAYS = 56;
+/** …with this fraction of the width showing the days behind today. */
+export const WEEK_CONTEXT_FRACTION = 0.12;
+export const WEEK_MIN_PX_PER_DAY = 4;
+export const WEEK_MAX_PX_PER_DAY = 20;
+/** Two axis labels closer than this would collide, so the later one is dropped. */
+export const MIN_LABEL_GAP_PX = 40;
+/** Below this spacing between week ticks, labels shorten to the day of the month
+ *  (`14`) — the month band above already names the month, and `Sep 14` does not
+ *  fit in the ~30px between Mondays at 4px/day. */
+export const WEEK_SHORT_LABEL_SPACING_PX = 56;
+/** …and short labels may sit this close together. */
+export const SHORT_LABEL_GAP_PX = 24;
 /** Floor for a bar's width — a same-day task still has to be visible and clickable. */
 export const MIN_BAR_PX = 8;
 /** Half-width of the window used when there is nothing to fit (no tasks at all). */
@@ -131,12 +174,20 @@ export interface Range {
  * line can never sit outside the drawn axis. With no bars, a fixed window
  * around today keeps the axis (and its labels) meaningful instead of empty.
  */
-export function computeRange(bars: GanttBar[], todayDay: number, pad = PAD_DAYS): Range {
+export function computeRange(
+  bars: GanttBar[],
+  todayDay: number,
+  pad = PAD_DAYS,
+  minFutureDays = MIN_FUTURE_DAYS,
+): Range {
+  // The future is always drawn: an axis that ends wherever the last task
+  // happens to end gives the reader nothing to plan against (issue #37).
+  const horizon = todayDay + minFutureDays;
   if (bars.length === 0) {
-    return { from: todayDay - EMPTY_RANGE_HALF_DAYS, to: todayDay + EMPTY_RANGE_HALF_DAYS };
+    return { from: todayDay - EMPTY_RANGE_HALF_DAYS, to: Math.max(todayDay + EMPTY_RANGE_HALF_DAYS, horizon) + pad };
   }
   let min = todayDay;
-  let max = todayDay;
+  let max = Math.max(todayDay, horizon);
   for (const b of bars) {
     min = Math.min(min, b.startDay, b.endDay);
     max = Math.max(max, b.startDay, b.endDay);
@@ -272,21 +323,37 @@ export interface Tick {
  */
 export function ticksFor(r: Range, zoom: Zoom, pxPerDay: number): Tick[] {
   const out: Tick[] = [];
+  // Labels collide long before their gridlines stop being useful, so a labelled
+  // tick suppresses the next label within MIN_LABEL_GAP_PX — the line stays.
+  let lastLabelX = Number.NEGATIVE_INFINITY;
+  const spacedLabel = (x: number, text: string, gap = MIN_LABEL_GAP_PX): string | null => {
+    if (x - lastLabelX < gap) return null;
+    lastLabelX = x;
+    return text;
+  };
+  const shortWeekLabels = pxPerDay * 7 < WEEK_SHORT_LABEL_SPACING_PX;
   for (let day = r.from; day <= r.to; day++) {
     const dt = new Date(day * DAY_MS);
     const dow = dt.getUTCDay(); // 0 = Sunday
     const dom = dt.getUTCDate();
+    const x = xForDay(day, r, pxPerDay);
     if (zoom === 'day') {
       const major = dow === 1;
-      out.push({ day, x: xForDay(day, r, pxPerDay), label: major ? dayToShort(day) : String(dom).padStart(2, '0'), major });
+      out.push({ day, x, label: major ? spacedLabel(x, dayToShort(day)) : String(dom).padStart(2, '0'), major });
     } else if (zoom === 'week') {
-      if (dow === 1) out.push({ day, x: xForDay(day, r, pxPerDay), label: dayToShort(day), major: true });
+      if (dow === 1) {
+        const text = shortWeekLabels ? String(dom).padStart(2, '0') : dayToShort(day);
+        out.push({ day, x, label: spacedLabel(x, text, shortWeekLabels ? SHORT_LABEL_GAP_PX : MIN_LABEL_GAP_PX), major: true });
+      }
     } else if (dom === 1) {
-      out.push({ day, x: xForDay(day, r, pxPerDay), label: `${MONTHS[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`, major: true });
+      out.push({ day, x, label: spacedLabel(x, `${MONTHS[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`), major: true });
     }
   }
+  // Never an unlabelled axis.
   if (out.length === 0) {
     out.push({ day: r.from, x: 0, label: dayToISO(r.from), major: true });
+  } else if (out.every((t) => t.label === null)) {
+    out[0] = { ...out[0], label: dayToShort(out[0].day), major: true };
   }
   return out;
 }

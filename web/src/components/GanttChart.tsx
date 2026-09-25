@@ -6,6 +6,7 @@ import {
   barsFor,
   computeRange,
   dayGridlines,
+  daysAheadVisible,
   dayToISO,
   dayToShort,
   monthSpans,
@@ -13,7 +14,9 @@ import {
   sortBars,
   ticksFor,
   todayX,
+  WEEK_CONTEXT_FRACTION,
   weekendSpans,
+  weekZoomPxPerDay,
   ZOOMS,
   zoomLevel,
   type GanttBar,
@@ -27,8 +30,12 @@ import Icon from './Icon';
  *  screen and every bar started underneath it. */
 const LABEL_W_WIDE = 200;
 const LABEL_W_COMPACT = 132;
-/** Below this width the label column (and its metadata) go compact. */
+/** Below this viewport width the label column (and its metadata) go compact. */
 const COMPACT_QUERY = '(max-width: 640px)';
+/** Below this PANE width they go compact regardless of the viewport — the column
+ *  must never eat half the chart just because the window is wide but the sidebars
+ *  are open (measured: 1000px window → 404px pane → a 200px column). */
+const COMPACT_PANE_PX = 640;
 /** Height of the two-tier axis (month band + tick row). Shared via --gantt-axis-h. */
 const AXIS_H = 46;
 /** Below this bar width there is no room for a title inside the bar. */
@@ -64,8 +71,13 @@ function barTitle(b: GanttBar): string {
  */
 export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onOpen: (path: string) => void }) {
   const [zoom, setZoom] = useState<Zoom>('week');
-  const [compact, setCompact] = useState(() => window.matchMedia(COMPACT_QUERY).matches);
+  const [narrowViewport, setNarrowViewport] = useState(() => window.matchMedia(COMPACT_QUERY).matches);
+  /** Width of the chart pane itself (the scroll container). */
+  const [paneW, setPaneW] = useState(0);
+  const compact = narrowViewport || (paneW > 0 && paneW < COMPACT_PANE_PX);
   const LABEL_W = compact ? LABEL_W_COMPACT : LABEL_W_WIDE;
+  /** Width of the axis that is on screen, i.e. the pane minus the sticky column. */
+  const usableW = Math.max(0, paneW - LABEL_W);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   /** Set once the user scrolls/drags/taps the timeline, or changes the zoom. */
@@ -74,7 +86,10 @@ export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onO
   const todayDay = useMemo(() => parseDay(todayISO()) ?? 0, []);
   const bars = useMemo(() => sortBars(barsFor(tasks, todayDay)), [tasks, todayDay]);
   const range = useMemo(() => computeRange(bars, todayDay), [bars, todayDay]);
-  const pxPerDay = zoomLevel(zoom).pxPerDay;
+  // Week zoom is width-aware (issue #37): it fits eight weeks ahead of today into
+  // whatever space the axis has, so a laptop or a phone is not limited to the two
+  // to four weeks a fixed 16px/day would show. Day and Month keep fixed scales.
+  const pxPerDay = zoom === 'week' ? weekZoomPxPerDay(usableW) : zoomLevel(zoom).pxPerDay;
   const axisPx = axisWidth(range, pxPerDay);
   const ticks = useMemo(() => ticksFor(range, zoom, pxPerDay), [range, zoom, pxPerDay]);
   const months = useMemo(() => monthSpans(range, pxPerDay), [range, pxPerDay]);
@@ -86,7 +101,7 @@ export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onO
 
   useEffect(() => {
     const mq = window.matchMedia(COMPACT_QUERY);
-    const onChange = () => setCompact(mq.matches);
+    const onChange = () => setNarrowViewport(mq.matches);
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, []);
@@ -94,7 +109,10 @@ export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onO
   const scrollToToday = () => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollLeft = Math.max(0, lineX - Math.round((el.clientWidth - LABEL_W) / 3));
+    // Today lands near the left edge: the weeks ahead are the point of the view,
+    // so only a sliver of past context is kept behind the line.
+    const usable = Math.max(0, el.clientWidth - LABEL_W);
+    el.scrollLeft = Math.max(0, lineX - Math.round(usable * WEEK_CONTEXT_FRACTION));
   };
 
   // Land on today on mount — the axis can be long at day zoom, and a timeline
@@ -116,6 +134,10 @@ export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onO
     const el = scrollRef.current;
     const grid = gridRef.current;
     if (!el || !grid) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      setPaneW((prev) => (Math.abs(prev - w) > 1 ? w : prev));
+    };
     const land = () => {
       if (!tookOverRef.current) scrollToToday();
     };
@@ -124,10 +146,18 @@ export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onO
     };
     // Observe BOTH: the container resizes when a pane changes, and the grid
     // resizes when the tasks arrive or a zoom level changes.
-    const ro = new ResizeObserver(() => requestAnimationFrame(land));
+    const ro = new ResizeObserver(() =>
+      requestAnimationFrame(() => {
+        measure();
+        land();
+      }),
+    );
     ro.observe(el);
     ro.observe(grid);
-    const raf = requestAnimationFrame(land);
+    const raf = requestAnimationFrame(() => {
+      measure();
+      land();
+    });
     el.addEventListener('wheel', takeOver, { passive: true });
     el.addEventListener('pointerdown', takeOver);
     el.addEventListener('touchstart', takeOver, { passive: true });
@@ -161,6 +191,14 @@ export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onO
           ))}
         </div>
         <span className="grow" />
+        {zoom === 'week' && usableW > 0 && (
+          <span
+            className="gantt-horizon"
+            title="Days ahead of today that are on screen at this width"
+          >
+            {(daysAheadVisible(usableW, pxPerDay) / 7).toFixed(1)} weeks ahead
+          </span>
+        )}
         <span className="gantt-count">
           {bars.length} task{bars.length === 1 ? '' : 's'}
         </span>
@@ -200,7 +238,7 @@ export default function GanttChart({ tasks, onOpen }: { tasks: TaskRecord[]; onO
               </div>
               <div className="gantt-ticks">
                 {ticks.map((t) => (
-                  <div key={t.day} className={`gantt-tick ${t.major ? 'major' : ''}`} style={{ left: t.x }}>
+                  <div key={t.day} className={`gantt-tick ${t.major ? 'major' : ''}`} data-day={t.day} style={{ left: t.x }}>
                     {t.label !== null && <span className="gantt-tick-label">{t.label}</span>}
                   </div>
                 ))}
