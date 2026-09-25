@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore, type ContextMenuItem } from '../lib/store';
 import { api, type TaskRecord, type TreeNode } from '../lib/api';
+import DueDateEditor from './DueDateEditor';
 import {
+  changeTaskDue,
   columnIdFor,
   columnsFor,
   DEFAULT_HIDDEN_STATUSES,
@@ -9,6 +11,7 @@ import {
   hiddenByStatus,
   isMissingStatus,
   isOverdue,
+  isUndated,
   moveTask,
   restoreTask,
   changeTaskStatus,
@@ -60,6 +63,10 @@ export default function TasksView() {
   // Status filter (issue #39). Finished work is hidden on arrival; everything
   // else — including unmapped statuses — stays visible until the user hides it.
   const [hiddenStatuses, setHiddenStatuses] = useState<string[]>([...DEFAULT_HIDDEN_STATUSES]);
+  /** Path whose due date is being edited inline (null = nobody). */
+  const [dueEditPath, setDueEditPath] = useState<string | null>(null);
+  /** Show only tasks with no due date — scheduling in one pass (#41). */
+  const [undatedOnly, setUndatedOnly] = useState(false);
   // Board | Timeline lives in the store, so `/tasks?mode=…` is a real deep link
   // (see urlsync) and the palette entry works whether or not this view is mounted.
   const mode = useStore((s) => s.tasksMode);
@@ -118,7 +125,17 @@ export default function TasksView() {
     );
   }, [tasks, priority, owner, q]);
 
-  const visibleTasks = useMemo(() => filterByStatus(cardFiltered, hiddenStatuses), [cardFiltered, hiddenStatuses]);
+  // Counted over what the status filter is showing, so the number always matches
+  // the cards the undated filter will reveal.
+  const undatedCount = useMemo(
+    () => filterByStatus(cardFiltered, hiddenStatuses).filter(isUndated).length,
+    [cardFiltered, hiddenStatuses],
+  );
+  const passesDue = useMemo(() => (t: TaskRecord) => !undatedOnly || isUndated(t), [undatedOnly]);
+  const visibleTasks = useMemo(
+    () => filterByStatus(cardFiltered, hiddenStatuses).filter(passesDue),
+    [cardFiltered, hiddenStatuses, passesDue],
+  );
   const hiddenCount = useMemo(() => hiddenByStatus(cardFiltered, hiddenStatuses), [cardFiltered, hiddenStatuses]);
   const facets = useMemo(() => statusFacets(cardFiltered), [cardFiltered]);
 
@@ -128,10 +145,10 @@ export default function TasksView() {
   const columns = useMemo(
     () =>
       columnsFor(cardFiltered).map((c) => {
-        const visible = filterByStatus(c.tasks, hiddenStatuses);
+        const visible = filterByStatus(c.tasks, hiddenStatuses).filter(passesDue);
         return { ...c, tasks: visible, hidden: c.tasks.length - visible.length };
       }),
-    [cardFiltered, hiddenStatuses],
+    [cardFiltered, hiddenStatuses, passesDue],
   );
   const today = useMemo(() => todayISO(), []);
 
@@ -158,14 +175,39 @@ export default function TasksView() {
     }
   };
 
+  /**
+   * Set (or clear) a card's due date. `due` is a YYYY-MM-DD date or 'none'.
+   * Same shape as `move`: optimistic, rolled back on failure, with a notice.
+   */
+  const setDue = async (path: string, due: string) => {
+    const previous = tasks.find((t) => t.path === path);
+    setDueEditPath(null);
+    if (!previous || (previous.due ?? 'none') === due) return; // nothing to write
+    setTasks((cur) => cur.map((t) => (t.path === path ? { ...t, due } : t)));
+    try {
+      await changeTaskDue(path, due);
+      notify(due === 'none' ? `Cleared the due date on \"${previous.title}\"` : `Due date on \"${previous.title}\" set to ${due}`);
+    } catch (e: unknown) {
+      setTasks((cur) => restoreTask(cur, previous));
+      notify(`Could not set the due date on \"${previous.title}\": ${errorMessage(e)}`);
+    }
+  };
+
   const moveMenuItems = (task: TaskRecord, currentColId: string): ContextMenuItem[] =>
     columns
       .filter((c) => c.id !== currentColId)
       .map((c) => ({ label: `Move to → ${c.label}`, onClick: () => move(task.path, c.id) }));
 
+  /** Card menu: scheduling first (the point of #41), then the status moves. */
+  const cardMenuItems = (task: TaskRecord, currentColId: string): ContextMenuItem[] => [
+    { label: 'Set due date…', onClick: () => setDueEditPath(task.path) },
+    ...(isUndated(task) ? [] : [{ label: 'Clear due date', onClick: () => setDue(task.path, 'none') }]),
+    ...moveMenuItems(task, currentColId),
+  ];
+
   const onCardContextMenu = (e: React.MouseEvent, task: TaskRecord, colId: string) => {
     e.preventDefault();
-    openContextMenu({ x: e.clientX, y: e.clientY, items: moveMenuItems(task, colId) });
+    openContextMenu({ x: e.clientX, y: e.clientY, items: cardMenuItems(task, colId) });
   };
 
   // Touch-friendly fallback for drag & drop.
@@ -173,7 +215,7 @@ export default function TasksView() {
     e.preventDefault();
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    openContextMenu({ x: Math.round(rect.left), y: Math.round(rect.bottom) + 4, items: moveMenuItems(task, colId) });
+    openContextMenu({ x: Math.round(rect.left), y: Math.round(rect.bottom) + 4, items: cardMenuItems(task, colId) });
   };
 
   const toolbar = (
@@ -256,7 +298,25 @@ export default function TasksView() {
           );
         })}
       </div>
+      {undatedCount > 0 && (
+        <button
+          className={`status-chip undated-chip ${undatedOnly ? 'on' : 'off'}`}
+          data-undated={undatedOnly ? 'on' : 'off'}
+          aria-pressed={undatedOnly}
+          title="Show only tasks with no due date"
+          onClick={() => setUndatedOnly((v) => !v)}
+        >
+          <span className="status-chip-dot chip-undated" />
+          <span className="status-chip-label">Needs a due date</span>
+          <span className="status-chip-count">{undatedCount}</span>
+        </button>
+      )}
       <span className="grow" />
+      {undatedOnly && (
+        <button className="tasks-show-all" onClick={() => setUndatedOnly(false)}>
+          showing only undated — show all
+        </button>
+      )}
       {hiddenCount > 0 && (
         <button className="tasks-show-all" onClick={() => setHiddenStatuses([])}>
           {hiddenCount} hidden — show all
@@ -292,7 +352,13 @@ export default function TasksView() {
       {statusRow}
       {loadError && <div className="tasks-error">{loadError}</div>}
       {mode === 'timeline' ? (
-        <GanttChart tasks={visibleTasks} onOpen={openFile} />
+        <GanttChart
+          tasks={visibleTasks}
+          onOpen={openFile}
+          dueEditPath={dueEditPath}
+          onEditDue={setDueEditPath}
+          onSetDue={setDue}
+        />
       ) : (
         <div className="tasks-board">
         {columns.map((col) => (
@@ -352,14 +418,33 @@ export default function TasksView() {
                       <Icon name="more-horizontal" size={14} />
                     </button>
                   </div>
-                  {(t.priority || t.owner || t.due) && (
+                  {(t.priority || t.owner || t.due || isUndated(t)) && (
                     <div className="task-card-meta">
                       {t.priority && <span className="task-badge task-priority">{t.priority}</span>}
                       {t.owner && <span className="task-badge task-owner">{t.owner}</span>}
-                      {t.due && (
-                        <span className={`task-badge task-due ${isOverdue(t, today) ? 'overdue' : ''}`}>
-                          {t.due}
-                        </span>
+                      {dueEditPath === t.path ? (
+                        <DueDateEditor
+                          value={t.due}
+                          onCommit={(due) => setDue(t.path, due)}
+                          onCancel={() => setDueEditPath(null)}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className={`task-badge task-due ${isOverdue(t, today) ? 'overdue' : ''} ${
+                            isUndated(t) ? 'undated' : ''
+                          }`}
+                          title={isUndated(t) ? 'No due date — click to set one' : `Due ${t.due} — click to change`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDueEditPath(t.path);
+                          }}
+                        >
+                          {isUndated(t) ? 'no due' : t.due}
+                          <span className="task-due-caret" aria-hidden="true">
+                            ▾
+                          </span>
+                        </button>
                       )}
                     </div>
                   )}
