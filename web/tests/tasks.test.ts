@@ -3,6 +3,10 @@ import { afterEach, beforeEach, mock, test } from 'node:test';
 import { api, ApiError, type TaskRecord } from '../src/lib/api';
 import {
   changeTaskStatus,
+  DEFAULT_HIDDEN_STATUSES,
+  filterByStatus,
+  hiddenByStatus,
+  statusFacets,
   columnIdFor,
   columnsFor,
   isMissingStatus,
@@ -128,6 +132,57 @@ test('columnsFor sorts cards by priority (P1<P2<P3<none), then due (dated first,
 });
 
 // ---- isOverdue ----
+
+test('the default status filter hides finished work only', () => {
+  assert.deepEqual([...DEFAULT_HIDDEN_STATUSES], ['done']);
+});
+
+test('filterByStatus drops the hidden statuses and nothing else', () => {
+  const tasks = [
+    task({ path: 'a.md', status: 'open', statusRaw: 'open' }),
+    task({ path: 'b.md', status: 'done', statusRaw: 'done' }),
+    task({ path: 'c.md', status: 'blocked', statusRaw: 'waiting' }), // alias
+    task({ path: 'd.md', status: 'escalated', statusRaw: 'escalated' }), // unmapped
+    task({ path: 'e.md', status: 'open', statusRaw: null }), // no status key
+  ];
+  assert.deepEqual(
+    filterByStatus(tasks, DEFAULT_HIDDEN_STATUSES).map((t) => t.path),
+    ['a.md', 'c.md', 'd.md', 'e.md'],
+    'only the done card goes',
+  );
+  assert.equal(filterByStatus(tasks, []).length, 5, 'an empty filter hides nothing');
+  assert.deepEqual(
+    filterByStatus(tasks, ['done', 'blocked']).map((t) => t.path),
+    ['a.md', 'd.md', 'e.md'],
+    'aliases are resolved before hiding',
+  );
+  assert.equal(hiddenByStatus(tasks, ['done']), 1);
+  assert.equal(hiddenByStatus(tasks, ['done', 'blocked', 'escalated']), 3);
+  assert.equal(hiddenByStatus(tasks, []), 0);
+});
+
+test('statusFacets lists the canonical four first (even at zero), then unmapped values', () => {
+  const tasks = [
+    task({ status: 'open', statusRaw: 'open' }),
+    task({ status: 'done', statusRaw: 'closed' }), // alias counts as done
+    task({ status: 'escalated', statusRaw: 'escalated' }),
+    task({ status: 'escalated', statusRaw: 'escalated' }),
+    task({ status: 'blocked', statusRaw: 'waiting' }),
+  ];
+  const facets = statusFacets(tasks);
+  assert.deepEqual(facets.map((f) => f.id), ['open', 'in-progress', 'blocked', 'done', 'escalated']);
+  assert.deepEqual(facets.map((f) => f.count), [1, 0, 1, 1, 2]);
+  assert.deepEqual(facets.slice(0, 4).map((f) => f.label), ['Backlog', 'Doing', 'Blocked', 'Done']);
+  assert.deepEqual(facets.slice(0, 4).map((f) => f.canonical), [true, true, true, true]);
+  assert.equal(facets[4].canonical, false);
+  assert.equal(facets[4].label, 'escalated', 'an unmapped status is its own label');
+});
+
+test('statusFacets counts a card with no status key as Backlog', () => {
+  const facets = statusFacets([task({ status: 'open', statusRaw: null })]);
+  assert.equal(facets[0].count, 1);
+  assert.equal(facets[3].count, 0, 'Done starts empty');
+});
 
 test('isOverdue', () => {
   assert.equal(isOverdue(task({ due: '2026-01-01', status: 'open' }), '2026-09-25'), true);
