@@ -11,6 +11,7 @@ import {
   changeTaskStatus,
   todayISO,
 } from '../lib/tasks';
+import GanttChart from './GanttChart';
 import Icon from './Icon';
 
 const TASK_TEMPLATE_PATH = 'Wiki/templates/task.md';
@@ -52,10 +53,10 @@ export default function TasksView() {
   const [priority, setPriority] = useState('');
   const [owner, setOwner] = useState('');
   const [q, setQ] = useState('');
-  // Timeline (issue #32) isn't built yet — the toggle exists so the URL/state
-  // shape is stable, but only the Board option is shown for now: any `?mode`
-  // value other than `board` (incl. `timeline`) is treated as `board`.
-  const [mode, setMode] = useState<'board' | 'timeline'>('board');
+  // Board | Timeline lives in the store, so `/tasks?mode=…` is a real deep link
+  // (see urlsync) and the palette entry works whether or not this view is mounted.
+  const mode = useStore((s) => s.tasksMode);
+  const setMode = useStore((s) => s.setTasksMode);
 
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,8 +194,14 @@ export default function TasksView() {
         >
           Board
         </button>
-        {/* Timeline ships with issue #32 — kept in the markup, hidden, so ?mode=timeline has somewhere to land. */}
-        <button className={mode === 'timeline' ? 'active' : ''} title="Timeline view" hidden>
+        <button
+          className={mode === 'timeline' ? 'active' : ''}
+          title="Timeline view (Gantt)"
+          onClick={() => {
+            setMode('timeline');
+            window.history.replaceState(null, '', '/tasks?mode=timeline');
+          }}
+        >
           Timeline
         </button>
       </div>
@@ -229,7 +236,10 @@ export default function TasksView() {
     <div className="tasks-view">
       {toolbar}
       {loadError && <div className="tasks-error">{loadError}</div>}
-      <div className="tasks-board">
+      {mode === 'timeline' ? (
+        <GanttChart tasks={filtered} onOpen={openFile} />
+      ) : (
+        <div className="tasks-board">
         {columns.map((col) => (
           <div
             key={col.id}
@@ -309,7 +319,8 @@ export default function TasksView() {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

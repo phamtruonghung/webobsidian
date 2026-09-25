@@ -34,6 +34,7 @@ export default function CommandPalette() {
   const setTrash = useStore((s) => s.setTrash);
   const setGraph = useStore((s) => s.setGraph);
   const openTasks = useStore((s) => s.openTasks);
+  const setTasksMode = useStore((s) => s.setTasksMode);
   const setLeftPanel = useStore((s) => s.setLeftPanel);
   const setViewMode = useStore((s) => s.setViewMode);
   const save = useStore((s) => s.save);
@@ -59,6 +60,17 @@ export default function CommandPalette() {
       { id: 'bookmarks', title: 'Open bookmarks & recent', run: () => setLeftPanel('bookmarks') },
       { id: 'graph', title: 'Open graph view', run: () => setGraph(true) },
       { id: 'tasks', title: 'Open tasks board', run: () => openTasks() },
+      {
+        id: 'tasks-timeline',
+        title: 'Open tasks timeline',
+        run: () => {
+          // State first (the view may already be mounted and reading it), then
+          // the deep link, then open/focus the tab.
+          setTasksMode('timeline');
+          window.history.replaceState(null, '', '/tasks?mode=timeline');
+          return openTasks();
+        },
+      },
       { id: 'settings', title: 'Open settings', run: () => setSettings(true) },
       { id: 'trash', title: 'Open trash', run: () => setTrash(true) },
       { id: 'reading', title: 'View: Reading mode', run: () => setViewMode('reading') },
