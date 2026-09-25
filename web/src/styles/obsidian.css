@@ -1055,6 +1055,18 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   padding: 7px 12px; border-top: 1px solid var(--bg-modifier-border); color: var(--text-faint); font-size: 11px; }
 .palette-footer .kbd { color: var(--text-muted); font-size: 11px; margin-right: 3px; }
 
+/* New note from template (FR-17) — template list on top, the title/folder form
+   and the path the note will be created at below it. */
+.tpl-form { display: flex; flex-direction: column; gap: 9px; padding: 12px 14px;
+  border-top: 1px solid var(--bg-modifier-border); }
+.tpl-row { display: flex; align-items: center; gap: 10px; }
+.tpl-label { width: 52px; flex-shrink: 0; color: var(--text-muted); font-size: 12px; }
+.tpl-row .text-input { flex: 1; }
+.tpl-path { color: var(--text-faint); font-size: 12px; }
+.tpl-path code { background: var(--tag-bg); padding: 1px 5px; border-radius: var(--radius-s); }
+.tpl-error { color: var(--text-error, #e5534b); font-size: 12px; }
+.tpl-actions { display: flex; justify-content: flex-end; }
+
 /* Context menu */
 .context-menu { position: fixed; z-index: 300; min-width: 190px; background: var(--bg-primary);
   border: 1px solid var(--bg-modifier-border); border-radius: 8px; padding: 5px; box-shadow: var(--shadow); font-size: 13px; }

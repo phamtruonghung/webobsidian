@@ -11,6 +11,7 @@ export default function Ribbon({ onTheme }: { onTheme: () => void }) {
   const setSettings = useStore((s) => s.setSettings);
   const setPalette = useStore((s) => s.setPalette);
   const openDailyNote = useStore((s) => s.openDailyNote);
+  const setTemplatePicker = useStore((s) => s.setTemplatePicker);
   const notify = useStore((s) => s.notify);
   const loadTree = useStore((s) => s.loadTree);
 
@@ -58,6 +59,9 @@ export default function Ribbon({ onTheme }: { onTheme: () => void }) {
       </button>
       <button title="Daily note" onClick={() => openDailyNote()}>
         <Icon name="calendar" size={18} />
+      </button>
+      <button title="New note from template" onClick={() => setTemplatePicker(true)}>
+        <Icon name="file-plus" size={18} />
       </button>
       <button className={leftPanel === 'tags' ? 'active' : ''} title="Tags" onClick={() => setLeftPanel('tags')}>
         <Icon name="hash" size={18} />

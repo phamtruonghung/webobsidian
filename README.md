@@ -133,6 +133,9 @@ scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head and merge 
   Mermaid diagrams.
 - 🕸️ **Graph view** — force-directed graph built from your wikilinks, with fly-to node
   search and highlighting.
+- 📄 **New note from template** — pick a template from your vault's `templates` folder and it is
+  created as `<folder>/<YYYY-MM-DD>-<slug>.md` with its placeholders filled and opened for you:
+  no manual copy, rename or re-dating (command palette → *New note from template*)
 - 🗂️ **Tasks board** — Kanban view over `type: task` notes (`/tasks`); drag a card to change its
   `status:` frontmatter, filter by folder/priority/owner/title, `GET /api/tasks` (and
   `/api/v1/tasks` for agents).

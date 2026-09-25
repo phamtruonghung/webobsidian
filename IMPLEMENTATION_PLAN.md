@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-25 (FR-16 — Timeline/Gantt: restyle giao diện theo phản hồi "too ugly", issue #35)
+Cập nhật lần cuối: 2026-09-26 (FR-17 — Tạo note từ template: hết copy tay 4 bước, issue #42)
 
 ---
 
@@ -589,7 +589,43 @@ Cập nhật lần cuối: 2026-09-25 (FR-16 — Timeline/Gantt: restyle giao di
       Done → 10 thanh, tắt → 9; cột Done rỗng với `+1 hidden`; hình học thanh vẫn khớp kỳ vọng Python
       (9/9); 51/51 check PASS.
 
+## Phase 37 — Tạo note từ template (New note from template) — FR-17 (issue #42)
+- [x] M37.1 `web/src/lib/templates.ts` (thuần, không DOM/không server): `slugify` (bỏ dấu tiếng Việt
+      gồm cả `đ`/`Đ`, gom ký tự lạ thành `-`, cắt 60 ký tự), `substituteTemplate` (`{{title}}`,
+      `{{date}}`, `{{time}}`, `{{slug}}` + dạng chữ `YYYY-MM-DD-slug` xử lý **trước** `YYYY-MM-DD`),
+      `findTemplatesFolder` (BFS, thư mục nông nhất tên `templates`), `listTemplates`,
+      `targetCandidates` / `resolveTargetFolder` (`+s`, giữ nguyên tên, `y`→`ies`, `+es`, đoạn cuối sau
+      gạch), `uniqueNotePath` (`-2`, `-3`…). 16 unit test trong `web/tests/templates.test.ts`.
+- [x] M37.2 Store: `templatePicker` + `setTemplatePicker`; action `newFromTemplate(templatePath, title,
+      folder)` đọc template bằng `api.read`, ghi **create-only** (`baseVersion: ''`) và nhảy hậu tố khi
+      409, mở note, trả về path; từ chối title không ra slug và thư mục không tồn tại (không ghi gì).
+      6 test trong `web/tests/store.test.ts`.
+- [x] M37.3 UI: `web/src/components/TemplatePicker.tsx` (lọc template, Title, Folder luôn sửa được, dòng
+      `Creates <path>` hiện trước khi ghi, lỗi hiện trong modal), nút ribbon `file-plus`, mục command
+      palette "New note from template", CSS `.tpl-*` trong `obsidian.css`.
+- [x] M37.4 Kiểm chứng: `npm test` **118 web + server** PASS; `npm run typecheck` (4 workspace) PASS;
+      `npm run build` PASS; **headless Chromium trên bản COPY của vault thật**: modal liệt kê đủ 9
+      template, `meeting` → `Wiki/meetings`, tên dự đoán khớp file thật, note mở thành tab active, tên
+      trùng → `-2` (file đầu không đổi), thư mục sai → "Folder not found" và không tạo thư mục; **0
+      request lỗi, 0 pageerror/console error**; `deploy/smoke.sh` **7/7 PASS** trên server local.
+- [~] M37.5 PR + merge (merge commit) → chứng minh deploy: `/healthz` `build` == commit merge, bundle đã
+      deploy chứa chuỗi marker mới.
+
 ### Nhật ký tiến độ
+- 2026-09-26 (FR-17 — Tạo note từ template, issue #42): người dùng hỏi "khi họp tôi phải copy 1 file từ
+  template sang thư mục meetings rồi sửa, có cách nào tốt hơn không". Kiểm tra trước khi trả lời: app
+  **không có** tính năng template (lệnh "Open today's daily note" hardcode `Daily/<iso>.md` và không biết
+  `Wiki/`), và shim plugin **không thể** chạy Templater (`addCommand`/`registerView`/`loadData`/`saveData`
+  là no-op) → không có cách nào "bật" template, phải viết vào app. Quyết định (ghi ở PRD FR-17): **một
+  lệnh dùng chung** cho mọi template, thư mục template tự dò, thư mục đích suy từ tên template và **hiện
+  trước khi ghi**, placeholder thay cả dạng chữ vault đang dùng (nên không phải migrate template), tên
+  trùng thì `-2` và **không bao giờ ghi đè**, thư mục thiếu thì báo lỗi chứ không tự tạo. **Kiểm chứng**:
+  `npm test` 118 web PASS (+16 template, +6 store), typecheck 4 workspace PASS, build PASS, headless
+  Chromium trên bản copy vault thật PASS toàn bộ (9 template liệt kê đúng, `meeting`→`Wiki/meetings`,
+  `sources: [raw/meetings/2026-09-26-qms-review-with-ban-and-chien.md]` — token ghép không để lại `-slug`,
+  trùng tên → `-2` mà file đầu nguyên vẹn, thư mục sai → "Folder not found"), `deploy/smoke.sh` 7/7. Phát
+  hiện phụ khi kiểm chứng: restore workspace state của app gây **500** khi tab cũ trỏ vào file đã bị xoá
+  trên đĩa (lỗi có sẵn, không liên quan FR-17) — ghi lại để xử lý riêng.
 - 2026-09-25 (FR-15 — Tasks view: lọc theo trạng thái, mặc định ẩn Done, issue #39): người dùng yêu cầu
   thêm chức năng lọc theo trạng thái và mặc định không hiện Done. Quyết định khung (ghi ở PRD FR-15):
   chip theo trạng thái kèm số thẻ ở hàng riêng; mặc định chỉ ẩn `done`, giá trị lạ vẫn hiện; **cột Done

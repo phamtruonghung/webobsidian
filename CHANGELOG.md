@@ -6,6 +6,17 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Added
+- **New note from template — the copy, rename and re-date steps are gone.** A `New note from template`
+  command (command palette + a ribbon button) lists the templates in your vault's `templates` folder,
+  takes a title, and creates `<folder>/<YYYY-MM-DD>-<slug>.md` with the template's placeholders filled
+  in and the note opened for editing. The target folder is derived from the template's name
+  (`meeting` → `meetings`, `query` → `queries`, `weekly-review` → `reviews`), is shown before anything
+  is written, and stays editable. Placeholders: `{{title}}`, `{{date}}`, `{{time}}`, `{{slug}}` — plus
+  the literal `YYYY-MM-DD` / `YYYY-MM-DD-slug` shapes existing templates already use, so no template
+  has to be migrated. It never overwrites (a taken name moves to `-2`, `-3`, and the write is
+  create-only server-side) and it does not create a missing folder — it names it instead. *(issue #42)*
+
 ### Fixed
 - **The timeline now actually lands on today.** `scrollToToday()` ran on mount while the task list
   was still empty: the placeholder range fit the pane, so `scrollLeft` clamped to 0, and the stale

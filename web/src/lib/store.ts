@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { api, type TreeNode, type ShareRecord } from './api';
-import { findNode } from './tree';
+import { ApiError, api, type TreeNode, type ShareRecord } from './api';
+import { findNode, isFolderPath } from './tree';
+import { dateStamp, slugify, substituteTemplate, timeStamp, uniqueNotePath } from './templates';
 
 /** Per-tab id so we can ignore the echo of our own server-pushed state change. */
 export const CLIENT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -178,6 +179,9 @@ interface AppState {
   /** Open (true) or close (false) the Trash modal. */
   trashOpen: boolean;
   setTrash: (v: boolean) => void;
+  /** Open (true) or close (false) the New-note-from-template modal (FR-17). */
+  templatePicker: boolean;
+  setTemplatePicker: (v: boolean) => void;
   /** Open (true) or close (false) the Graph view tab. */
   setGraph: (v: boolean) => void;
   openGraph: () => Promise<void>;
@@ -228,6 +232,15 @@ interface AppState {
   renamingPath: string | null;
   setRenamingPath: (path: string | null) => void;
   openDailyNote: () => Promise<void>;
+  /**
+   * Create a note from a vault template (FR-17): `<folder>/<YYYY-MM-DD>-<slug>.md`
+   * with the template's placeholders filled in. Returns the created path.
+   *
+   * Throws — and writes nothing — when the target folder is absent or the title
+   * yields no usable slug. Never overwrites an existing note: the write is
+   * create-only (`baseVersion: ''`) and a conflict moves on to `-2`, `-3` …
+   */
+  newFromTemplate: (templatePath: string, title: string, folder: string) => Promise<string>;
   /** Re-fetch content for the active/split tabs (after reload or remote sync). */
   hydrate: () => Promise<void>;
   /** Load persisted workspace state from the server and apply it. */
@@ -439,6 +452,8 @@ export const useStore = create<AppState>()(
       setSettings: (v) => set({ settingsOpen: v }),
       trashOpen: false,
       setTrash: (v) => set({ trashOpen: v }),
+      templatePicker: false,
+      setTemplatePicker: (v) => set({ templatePicker: v }),
       setGraph: (v) => {
         if (v) get().openGraph();
         else get().closeTab(GRAPH_PATH);
@@ -673,6 +688,45 @@ export const useStore = create<AppState>()(
         }
         await get().createNote(path, `# ${iso}\n\n`);
         get().notify(`Daily note ${iso} ready`);
+      },
+
+      newFromTemplate: async (templatePath, title, folder) => {
+        const clean = title.trim();
+        const slug = slugify(clean);
+        if (!slug) throw new Error('A title is required — it names the file.');
+        const dir = folder.replace(/^\/+|\/+$/g, '');
+        if (dir && !isFolderPath(get().tree, dir)) throw new Error(`Folder not found: ${dir}`);
+
+        const { content } = await api.read(templatePath);
+        const now = new Date();
+        const date = dateStamp(now);
+        const body = substituteTemplate(typeof content === 'string' ? content : '', {
+          title: clean,
+          date,
+          time: timeStamp(now),
+          slug,
+        });
+
+        // Create-only: `baseVersion: ''` asks the server for "this path must not
+        // exist yet", so a note created on another device a second ago is not
+        // overwritten — the conflict moves us to -2, -3 … instead.
+        let path = uniqueNotePath(dir, `${date}-${slug}`, (p) => !!findNode(get().tree, p));
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await api.write(path, body, '');
+            break;
+          } catch (e) {
+            if (!(e instanceof ApiError) || e.status !== 409 || attempt >= 20) throw e;
+            const suffix = /-(\d+)\.md$/.exec(path);
+            path = `${dir ? `${dir}/` : ''}${date}-${slug}-${suffix ? Number(suffix[1]) + 1 : 2}.md`;
+          }
+        }
+
+        await get().loadTree();
+        await get().openFile(path, { preview: false });
+        if (dir) get().revealInTree(path);
+        get().notify(`Created from template: ${path}`);
+        return path;
       },
 
       hydrate: async () => {

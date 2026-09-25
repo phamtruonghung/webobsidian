@@ -14,6 +14,7 @@ import VersionHistory from './components/VersionHistory';
 import TrashView from './components/TrashView';
 import ContextMenu from './components/ContextMenu';
 import FolderPicker from './components/FolderPicker';
+import TemplatePicker from './components/TemplatePicker';
 import { loadPlugins } from './lib/plugins';
 import { initUrlSync } from './lib/urlsync';
 import { useIsMobile } from './lib/useIsMobile';
@@ -193,6 +194,7 @@ export default function App() {
       <TrashView />
       <ContextMenu />
       <FolderPicker />
+      <TemplatePicker />
       {toast && <div className="toast">{toast}</div>}
     </div>
   );

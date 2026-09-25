@@ -1,7 +1,16 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.13 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Phiên bản: 1.14 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Changelog 1.14 (FR-17 — Tạo note từ template, issue #42): thêm lệnh **New note from template**
+> (command palette + ribbon) tạo note mới từ một template trong thư mục `templates` của vault: tự đặt
+> tên `<YYYY-MM-DD>-<slug>.md`, tự suy **thư mục đích** từ tên template (`meeting`→`meetings`,
+> `query`→`queries`, `weekly-review`→`reviews`), tự thay placeholder (`{{title}}`, `{{date}}`,
+> `{{time}}`, `{{slug}}` và đúng dạng chữ `YYYY-MM-DD` / `YYYY-MM-DD-slug` mà vault đang dùng — template
+> hiện có chạy được ngay, không phải migrate), rồi mở note vừa tạo. **Đường dẫn sẽ ghi được hiện ra
+> trước khi ghi** và ô thư mục luôn sửa được; **không bao giờ ghi đè** (create-only, trùng tên nhảy
+> `-2`, `-3`) và **không tự tạo thư mục thiếu** — báo lỗi thẳng. Không thêm endpoint, dependency hay
+> setting nào; logic thuần ở `web/src/lib/templates.ts`.
 > Changelog 1.13 (FR-15 — Tasks view: lọc theo trạng thái, mặc định ẩn `done`, issue #39): thêm
 > **hàng lọc Status** — mỗi trạng thái một chip kèm số thẻ (4 trạng thái chuẩn theo thứ tự cột, kể cả
 > khi 0 thẻ, rồi tới các giá trị lạ đang có). **Mặc định ẩn `done`**; giá trị lạ vẫn hiện (không ẩn dữ
@@ -663,6 +672,46 @@ Mục tiêu: chế độ **Timeline (Gantt)** trong cùng Tasks view (issue #32)
   thanh so với kỳ vọng tính độc lập bằng Python** từ frontmatter, lớp overdue/open-ended/unknown, đường
   hôm nay, nhãn trục, 3 mức zoom, click thanh/nhãn mở note, toggle, **reload giữ timeline**, cuộn ngang
   ở 390px, không lỗi console.
+
+### FR-17 · Tạo note từ template — hết copy tay (issue #42)
+Mục tiêu: mỗi lần họp hay ghi chép theo mẫu, người dùng đang phải tự làm 4 bước — tạo note trong đúng
+thư mục, đặt tên `YYYY-MM-DD-slug`, copy nội dung template vào, rồi tự điền `title` / `created` /
+`updated` / `date` / `sources`. Một lệnh **New note from template** làm cả 4 bước đó. Không có tính năng
+template nào trong app để bật: app không có core Templates plugin, và shim community plugin là **sai tập
+con** cho việc này (`addCommand`, `registerView`, `loadData`/`saveData` đều là no-op → Templater không
+bao giờ đăng ký được lệnh của nó), nên tính năng được viết thẳng vào app.
+
+- **Một lệnh dùng chung, template lấy từ vault**: mục command palette **"New note from template"** + nút
+  ribbon (`file-plus`), cả hai mở cùng một modal. Dùng chung cho meeting / task / procedure / abnormality
+  / document / query / weekly-review — không phải nút riêng cho meeting.
+- **Thư mục template tự dò**: thư mục **nông nhất** có tên `templates` (không phân biệt hoa thường) —
+  trong vault này là `Wiki/templates`. Không thêm setting, không thêm key cấu hình (Obsidian core
+  Templates cũng chỉ dùng một thư mục). Modal liệt kê mọi file `.md` trong đó (có ô lọc), ô **Title**, và
+  ô **Folder** sẽ chứa note mới.
+- **Thư mục đích suy ra từ template, và luôn hiện trước khi ghi**: xét các tên là *anh em* của thư mục
+  template (`Wiki/templates/meeting.md` → xét trong `Wiki/`): `meeting` → `meetings`; tên giữ nguyên
+  (`daily` → `daily`); `y` → `ies` (`query` → `queries`, `abnormality` → `abnormalities`); `+es` sau âm
+  sibilation; và **đoạn cuối sau dấu gạch** (`weekly-review` → `reviews`). Không khớp (ví dụ
+  `shift-handover`) thì ô Folder để trống cho người dùng gõ. Ô này **luôn sửa được và luôn hiển thị**,
+  nên note rơi đúng chỗ mà modal nói. **Thư mục thiếu KHÔNG tự tạo**: gõ sai một chữ sẽ rải note vào
+  thư mục rác, còn báo "Folder not found" trung thực chỉ tốn một lần sửa.
+- **Tên file & placeholder**: `<YYYY-MM-DD>-<slug>.md`; trùng tên → `-2`, `-3` … và **không bao giờ ghi
+  đè** (ghi kiểu create-only `baseVersion: ''`; 409 vì người khác vừa tạo → nhảy sang hậu tố kế tiếp).
+  Slug: chữ thường, bỏ dấu tiếng Việt **kể cả `đ`/`Đ`** (NFD không tách được hai ký tự này), ký tự khác
+  gom thành `-`, cắt 60 ký tự. Thay trong nội dung template: `{{title}}`, `{{date}}` (YYYY-MM-DD),
+  `{{time}}` (HH:mm), `{{slug}}`, và — để template hiện có **chạy được ngay, không phải migrate** — đúng
+  dạng chữ mà vault đang dùng: `YYYY-MM-DD-slug` (xử lý trước) rồi `YYYY-MM-DD`. Ngày/giờ là **giờ địa
+  phương của trình duyệt** (deployment này GMT+7); không thêm setting múi giờ.
+- **Hợp đồng state**: `templatePicker: boolean` + `setTemplatePicker(open)` trong store (giống
+  `setGraph` / `setSettings`); action `newFromTemplate(templatePath, title, folder) → Promise<string>`
+  dùng đúng `api.read` / `api.write` / tree hiện có, mở note vừa tạo và trả về path. Modal đóng khi thành
+  công; thất bại thì giữ nguyên modal và hiện lỗi. **Không thêm endpoint, không thêm dependency, không
+  đổi settings/schema.** Toàn bộ logic thuần nằm ở `web/src/lib/templates.ts` để test được không cần DOM.
+- **Không làm (non-goals)**: chạy JS của plugin/Templater; định dạng `{{date:...}}`; tự tạo thư mục còn
+  thiếu; setting cho thư mục template; phím tắt riêng.
+- **Phía vault (không phải code repo)**: `Wiki/templates/meeting.md` đang viết `title: Meeting — subject
+  YYYY-MM-DD`, nên note tạo ra vẫn còn chữ "subject"; đổi `title:`/H1 của template sang `{{title}}` thì
+  tiêu đề gõ vào đi thẳng vào note. Lệnh chạy đúng trong cả hai trường hợp.
 
 ## 4. Yêu cầu phi chức năng (NFR)
 - **Bảo mật**: password hash scrypt, JWT secret tự sinh, API key hash khi lưu, path traversal guard
