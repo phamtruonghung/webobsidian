@@ -178,6 +178,84 @@ export function todayX(r: Range, pxPerDay: number, todayDay: number): number {
   return xForDay(todayDay, r, pxPerDay);
 }
 
+const FULL_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** `Sep 28` — the axis label format (a date, not `09-28`). */
+export function dayToShort(day: number): string {
+  const dt = new Date(day * DAY_MS);
+  return `${MONTHS[dt.getUTCMonth()]} ${dt.getUTCDate()}`;
+}
+
+/** `September 2026` — the month band label. */
+export function monthLabel(day: number): string {
+  const dt = new Date(day * DAY_MS);
+  return `${FULL_MONTHS[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`;
+}
+
+export function isWeekend(day: number): boolean {
+  const dow = new Date(day * DAY_MS).getUTCDay();
+  return dow === 0 || dow === 6;
+}
+
+export interface Span {
+  from: number;
+  to: number;
+  x: number;
+  width: number;
+}
+
+/** Consecutive weekend days merged into spans (Sat + Sun render as one block). */
+export function weekendSpans(r: Range, pxPerDay: number): Span[] {
+  const out: Span[] = [];
+  let start: number | null = null;
+  for (let day = r.from; day <= r.to + 1; day++) {
+    if (day <= r.to && isWeekend(day)) {
+      if (start === null) start = day;
+      continue;
+    }
+    if (start !== null) {
+      const to = day - 1;
+      out.push({ from: start, to, x: xForDay(start, r, pxPerDay), width: (to - start + 1) * pxPerDay });
+      start = null;
+    }
+  }
+  return out;
+}
+
+export interface MonthSpan extends Span {
+  label: string;
+}
+
+/** One block per calendar month intersecting the range — the axis band. */
+export function monthSpans(r: Range, pxPerDay: number): MonthSpan[] {
+  const out: MonthSpan[] = [];
+  let day = r.from;
+  while (day <= r.to) {
+    const dt = new Date(day * DAY_MS);
+    const nextMonth = Math.floor(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 1) / DAY_MS);
+    const to = Math.min(nextMonth - 1, r.to);
+    out.push({ from: day, to, x: xForDay(day, r, pxPerDay), width: (to - day + 1) * pxPerDay, label: monthLabel(day) });
+    day = to + 1;
+  }
+  return out;
+}
+
+/**
+ * One entry per day, for the light alignment hairlines. Deliberately derived
+ * from the range rather than from `ticksFor` — at week zoom every tick is a
+ * Monday, so a tick-derived list would be empty exactly where the hairlines are
+ * most useful.
+ */
+export function dayGridlines(r: Range, pxPerDay: number, minPxPerDay = 12): { day: number; x: number }[] {
+  if (pxPerDay < minPxPerDay) return [];
+  const out: { day: number; x: number }[] = [];
+  for (let day = r.from; day <= r.to; day++) out.push({ day, x: xForDay(day, r, pxPerDay) });
+  return out;
+}
+
 export interface Tick {
   day: number;
   x: number;
@@ -200,9 +278,9 @@ export function ticksFor(r: Range, zoom: Zoom, pxPerDay: number): Tick[] {
     const dom = dt.getUTCDate();
     if (zoom === 'day') {
       const major = dow === 1;
-      out.push({ day, x: xForDay(day, r, pxPerDay), label: major ? dayToISO(day).slice(5) : String(dom).padStart(2, '0'), major });
+      out.push({ day, x: xForDay(day, r, pxPerDay), label: major ? dayToShort(day) : String(dom).padStart(2, '0'), major });
     } else if (zoom === 'week') {
-      if (dow === 1) out.push({ day, x: xForDay(day, r, pxPerDay), label: dayToISO(day).slice(5), major: true });
+      if (dow === 1) out.push({ day, x: xForDay(day, r, pxPerDay), label: dayToShort(day), major: true });
     } else if (dom === 1) {
       out.push({ day, x: xForDay(day, r, pxPerDay), label: `${MONTHS[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`, major: true });
     }
