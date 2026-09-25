@@ -557,6 +557,15 @@ Cập nhật lần cuối: 2026-09-25 (FR-16 — Timeline/Gantt: restyle giao di
       → `build=5b59ac0`, `/tasks?mode=timeline` HTTP 200, bundle deploy chứa `gantt-bar`/`gantt-day-w`/
       `mode=timeline`; `GET /api/v1/tasks` (key scope `read`) trả 6 task thật của vault — comment trên issue #32.
 - [ ] M35.7 Người dùng kiểm tra bằng mắt trên deployment thật (kéo thả của FR-15 + Timeline của FR-16).
+- [x] M35.13 `weekZoomPxPerDay`/`daysAheadVisible`: zoom Week theo bề rộng trục, mục tiêu **8 tuần tới**
+      + 12% ngữ cảnh phía sau, kẹp `[4, 20]` px/ngày; Month còn 3px/ngày để giữ thứ tự zoom; unit test
+      cho cả ba bề rộng điển hình (rộng/laptop/390px) và trường hợp chạm sàn.
+- [x] M35.14 `computeRange` luôn vẽ tới **hôm nay + 56 ngày** (runway 8 tuần) kể cả khi mọi task đến hạn
+      sớm hơn; test cập nhật theo hợp đồng mới.
+- [x] M35.15 Nhãn tick tuần theo mật độ (`Sep 14` ↔ `14`) + quy tắc chống chồng nhãn 24/40px, đường lưới
+      giữ nguyên; test cho cả ba mức mật độ.
+- [x] M35.16 Cột nhãn compact theo bề rộng **pane**; chip "N weeks ahead" trên thanh công cụ; kiểm chứng
+      headless ở 1440/1000/390px đều đạt **8.0 tuần tới** (42/42 check PASS).
 - [x] M35.8 Dải tháng + tick tuần/ngày/tháng, nhãn ngày dạng `Sep 28`; helper thuần `dayToShort`,
       `monthLabel`, `isWeekend`, `weekendSpans`, `monthSpans`, `dayGridlines` + unit test.
 - [x] M35.9 Lưới phân cấp (hairline ngày / đường tuần / đường tháng 2px) thay cho gradient mỗi ngày;
@@ -569,6 +578,19 @@ Cập nhật lần cuối: 2026-09-25 (FR-16 — Timeline/Gantt: restyle giao di
       zoom; test DOM khẳng định đường hôm nay phải **nằm trong vùng nhìn thấy**.
 
 ### Nhật ký tiến độ
+- 2026-09-25 (FR-16 — Timeline: cửa sổ 8 tuần theo bề rộng, issue #37): người dùng yêu cầu "trong
+  timeframe Week muốn thấy task của ít nhất 8 tuần tới, tuỳ kích thước màn hình". Đo trước khi sửa:
+  ở 16px/ngày cố định thì 1440px → 10.6 tuần, nhưng 1000px (mở cả hai sidebar) → **4.4 tuần**, 390px →
+  **2.3 tuần** — đúng chỗ người dùng phàn nàn. Đã làm: `weekZoomPxPerDay(usableW)` = `clamp(usable /
+  (56/0.88), 4, 20)` với 12% bề ngang giữ phía sau hôm nay (hôm nay nằm gần mép trái vì phần đáng xem là
+  phía trước), `computeRange` mở rộng tới **hôm nay + 56 ngày** luôn, nhãn tuần đổi định dạng theo mật
+  độ (`Sep 14` ↔ `14`), cột nhãn compact theo bề rộng **pane** chứ không theo viewport (cửa sổ 1000px
+  pane chỉ ~404px mà cột vẫn 200px), Month zoom hạ còn 3px/ngày để thứ tự zoom không đảo sau khi sàn
+  Week hạ xuống 4, và chip "N weeks ahead" trên thanh công cụ để thấy ngay chế độ này chạy. **Kiểm
+  chứng**: `npm test` 143 server + 92 web (25 test thuần); headless DOM **42/42 PASS** — trong đó có
+  assertion mới đo **số tuần phía trước đang nằm trong màn hình** ở ba bề rộng: 1440px → **8.0**,
+  1000px (cả hai sidebar) → **8.0**, 390px → **8.0** tuần, kèm khớp định dạng nhãn (`Aug 3` khi rộng,
+  `03` khi dày) và hình học thanh vẫn khớp kỳ vọng Python độc lập. M35.13–M35.16 `[x]`.
 - 2026-09-25 (FR-16 — Timeline/Gantt restyle, issue #35): người dùng báo "gantt chart UI too ugly".
   Thay vì đoán, **chụp ảnh bằng headless Chromium** (light/dark/mobile) rồi **soi từng ảnh** để chấm
   thiết kế — vòng lặp: chụp → nhận xét → sửa → chụp lại. Vấn đề xác nhận được: lưới là "sương mù"

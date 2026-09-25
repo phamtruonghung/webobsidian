@@ -15,6 +15,15 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   check, not just the line's offset (which was always "correct"). *(issue #35)*
 
 ### Changed
+- **Week zoom now shows at least the next eight weeks, whatever the screen.** Pixels per day is derived
+  from the chart's real width (`weekZoomPxPerDay`, clamped 4-20px/day) with 12% of the width left as
+  past context, and the timeline always draws 56 days of runway past today even when every task is due
+  sooner. Measured: 1440px → 8.0 weeks ahead, 1000px with both sidebars open → 8.0, 390px phone → 8.0
+  (it was 10.6 / 4.4 / 2.3 at a fixed 16px/day). Week ticks label as `Sep 14` when there is room and as
+  `14` when dense, `Month` zoom moved to 3px/day so the zoom order still holds, the title column goes
+  compact from the *pane* width rather than the viewport, and the toolbar reports "8.0 weeks ahead".
+  *(issue #37)*
+
 - **Tasks timeline restyled.** Two-tier axis (month band above week ticks) with labels like `Sep 28`
   instead of `09-28`; weekend shading; a layered grid (day hairlines, week lines, 2px month lines)
   replacing the per-day gradient haze; a today band, line and `Today` pill; rounded bars with priority

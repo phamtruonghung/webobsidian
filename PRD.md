@@ -1,7 +1,15 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.11 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Phiên bản: 1.12 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Changelog 1.12 (FR-16 — Timeline: tuần hiển thị tối thiểu 8 tuần tới, issue #37): zoom **Week**
+> nay **theo bề rộng thật của trục** — `pxPerDay = clamp(usable / (56/0.88), 4, 20)` với 12% bề ngang
+> giữ lại phía sau hôm nay — nên **8 tuần tới luôn nằm trong màn hình** ở mọi bề rộng khả thi
+> (đo được: 1440px → 8.0 tuần · 1000px mở cả hai sidebar → 8.0 · 390px → 8.0), thay vì 2–4 tuần như
+> mức 16px/ngày cố định trước đây. Dải thời gian luôn vẽ sẵn **56 ngày tới** kể cả khi mọi task đến
+> hạn sớm hơn. Nhãn trục đổi định dạng theo mật độ: `Sep 14` khi rộng, `14` khi dày (dải tháng đã nêu
+> tên tháng). Thêm chip "N weeks ahead" trên thanh công cụ. Cột nhãn chuyển compact theo **bề rộng
+> pane** (không chỉ viewport); Month zoom còn 3px/ngày để Week luôn > Month.
 > Changelog 1.11 (FR-16 — Timeline: restyle giao diện, issue #35): trục **2 tầng** (dải tháng +
 > tick tuần), nhãn ngày dạng "Sep 28" thay cho "09-28", **tô nền cuối tuần**, lưới phân cấp
 (ngày mảnh / tuần / tháng đậm) thay cho lớp gradient mỗi ngày, thanh bo góc có chip priority +
@@ -614,6 +622,18 @@ Mục tiêu: chế độ **Timeline (Gantt)** trong cùng Tasks view (issue #32)
   trạng thái + hạn (priority đã có trên thanh), không hiện tên task trong thanh. Màu trạng thái đo
   được: tương phản chữ trên thanh ≥ 4.5:1 ở cả hai theme (thấp nhất 4.70:1), `open` được nâng sáng
   trên theme tối. Không thêm dependency runtime, không đổi server.
+- **Cửa sổ thời gian (issue #37)**: ở zoom Week, tỉ lệ pixel/ngày suy ra từ bề rộng thật của trục
+  (`weekZoomPxPerDay`) để **8 tuần tới** vừa màn hình, kẹp trong `[4, 20]` px/ngày — màn rộng dừng ở
+  20px/ngày nên hiển thị **nhiều hơn** 8 tuần, màn hẹp đi xuống tới sàn 4px/ngày. Sàn là giới hạn thật
+  và được nói rõ: dưới ~200px trục thì 8 tuần không còn đọc được nữa. `computeRange` luôn mở rộng tới
+  **hôm nay + 56 ngày** (kể cả khi mọi task đến hạn sớm), để tương lai luôn có chỗ trên trục. Nhãn tick
+  tuần đổi định dạng theo khoảng cách (`WEEK_SHORT_LABEL_SPACING_PX`): `Sep 14` khi ≥56px/tuần, còn
+  `14` khi dày hơn — vì `Sep 14` rộng hơn khoảng cách ~30px giữa hai thứ Hai ở 4px/ngày; quy tắc chống
+  chồng nhãn dùng khe hở 24px cho nhãn ngắn và 40px cho nhãn dài, đường lưới **không bao giờ** bị bỏ.
+  Cột nhãn chuyển compact theo **bề rộng pane** (`COMPACT_PANE_PX = 640`), không chỉ theo viewport: cửa
+  sổ 1000px mở cả hai sidebar chỉ còn ~404px pane, cột 200px chiếm một nửa. Thanh công cụ hiện chip
+  "N weeks ahead" để thấy ngay chế độ này đang hoạt động. Month zoom còn **3px/ngày** để bảo toàn thứ
+  tự Month < Week < Day sau khi sàn Week hạ xuống 4.
 - **Bug đã sửa (do kiểm chứng DOM + ảnh chụp phát hiện)**: `scrollToToday()` chạy ở effect mount khi
   `tasks` còn rỗng → dải chỉ 31 ngày quanh hôm nay, container **chưa tràn** nên `scrollLeft` bị kẹp
   về 0 và **đường hôm nay nằm ngoài màn hình**; đồng thời callback giữ `lineX` cũ (240px) nên cuộn sai
