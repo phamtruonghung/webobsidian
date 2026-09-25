@@ -1,7 +1,15 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.13 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Phiên bản: 1.14 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Changelog 1.14 (FR-15 — Tasks view: đặt hạn từ board/timeline, issue #41): badge hạn trên thẻ trở
+> thành **control** — click mở `<input type="date">` ngay tại chỗ (Enter lưu, Esc huỷ, có nút Clear →
+> `due: none`), và menu `⋯` thêm "Set due date…"/"Clear due date" để tìm được bằng bàn phím. Ghi qua
+> hàm thuần `setTaskDue` (đổi **đúng** dòng `due:` + `updated:`, CAS `baseVersion`, rollback + notify
+> như thao tác kéo thẻ). Chip **"Needs a due date"** lọc nhanh các task chưa có hạn (đếm theo tập đang
+> hiện sau bộ lọc trạng thái). **Template `Wiki/templates/task.md`** đổi `due: none` → `due: YYYY-MM-DD`
+> kèm quy ước "hạn là một phần của định nghĩa action"; `Wiki/SCHEMA.md` nói `due` là bắt buộc, `none`
+> chỉ khi cố ý — để việc thiếu hạn trở thành quyết định nhìn thấy được, không phải ô trống im lặng.
 > Changelog 1.13 (FR-15 — Tasks view: lọc theo trạng thái, mặc định ẩn `done`, issue #39): thêm
 > **hàng lọc Status** — mỗi trạng thái một chip kèm số thẻ (4 trạng thái chuẩn theo thứ tự cột, kể cả
 > khi 0 thẻ, rồi tới các giá trị lạ đang có). **Mặc định ẩn `done`**; giá trị lạ vẫn hiện (không ẩn dữ
@@ -535,6 +543,16 @@ Timeline/Gantt dựng trên cùng shell Tasks view).
   đó bị ẩn: cột Done phải còn làm chỗ thả, nếu không sẽ không thể hoàn thành task bằng cách kéo; header
   hiện `+N hidden`, thân cột hiện "All hidden by the status filter". Timeline lọc cùng bộ trạng thái.
   Bộ lọc là state của component (như folder/priority/owner/text), không persist và không lên URL.
+- **Đặt hạn trực tiếp (issue #41)**: badge hạn trên thẻ là **nút** (kèm caret ▾ báo hiệu bấm được): click
+  mở ngay `<input type="date">` tại chỗ — Enter lưu, Esc huỷ, blur ra ngoài lưu, nút **Clear** ghi
+  `due: none`; click trong editor không làm mở note, focus chuyển trong editor không tự lưu. Menu `⋯`
+  (và chuột phải) thêm "Set due date…" / "Clear due date" — affordance cho bàn phím. Timeline dùng chung
+  control này ở cột nhãn (`.`gantt-due`), bấm vào *thanh* vẫn mở note. Ghi bằng hàm thuần
+  `setTaskDue(content, due, today)` — cùng phép "phẫu thuật" frontmatter với `setTaskStatus` (đổi đúng
+  dòng `due:`/`updated:`, giữ nguyên BOM/CRLF/thứ tự key/phần thân), gọi `changeTaskDue` → `PUT
+  /api/files/content` với `baseVersion` (409 khi lệch) — optimistic + rollback + `notify`. Chip **"Needs a
+  due date"** trong hàng lọc: đếm theo tập đang hiện (sau bộ lọc trạng thái) và một click lọc chỉ còn
+  task chưa có hạn, để xếp lịch một lượt.
 - **Bộ lọc**: phạm vi thư mục (mặc định "Whole vault"), priority, owner, free-text theo title. Nút
   Refresh thủ công + auto-refresh (debounce ~500ms) khi WebSocket báo thay đổi `.md` trong phạm vi lọc
   (sự kiện `wo-fs` mà `App.tsx` đã phát cho tree). Empty state giải thích quy ước `type: task` và link
