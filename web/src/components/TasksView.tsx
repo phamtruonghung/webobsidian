@@ -4,11 +4,15 @@ import { api, type TaskRecord, type TreeNode } from '../lib/api';
 import {
   columnIdFor,
   columnsFor,
+  DEFAULT_HIDDEN_STATUSES,
+  filterByStatus,
+  hiddenByStatus,
   isMissingStatus,
   isOverdue,
   moveTask,
   restoreTask,
   changeTaskStatus,
+  statusFacets,
   todayISO,
 } from '../lib/tasks';
 import GanttChart from './GanttChart';
@@ -53,6 +57,9 @@ export default function TasksView() {
   const [priority, setPriority] = useState('');
   const [owner, setOwner] = useState('');
   const [q, setQ] = useState('');
+  // Status filter (issue #39). Finished work is hidden on arrival; everything
+  // else — including unmapped statuses — stays visible until the user hides it.
+  const [hiddenStatuses, setHiddenStatuses] = useState<string[]>([...DEFAULT_HIDDEN_STATUSES]);
   // Board | Timeline lives in the store, so `/tasks?mode=…` is a real deep link
   // (see urlsync) and the palette entry works whether or not this view is mounted.
   const mode = useStore((s) => s.tasksMode);
@@ -99,7 +106,7 @@ export default function TasksView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folder]);
 
-  const filtered = useMemo(() => {
+  const cardFiltered = useMemo(() => {
     const p = priority.trim().toLowerCase();
     const o = owner.trim().toLowerCase();
     const lc = q.trim().toLowerCase();
@@ -111,7 +118,21 @@ export default function TasksView() {
     );
   }, [tasks, priority, owner, q]);
 
-  const columns = useMemo(() => columnsFor(filtered), [filtered]);
+  const visibleTasks = useMemo(() => filterByStatus(cardFiltered, hiddenStatuses), [cardFiltered, hiddenStatuses]);
+  const hiddenCount = useMemo(() => hiddenByStatus(cardFiltered, hiddenStatuses), [cardFiltered, hiddenStatuses]);
+  const facets = useMemo(() => statusFacets(cardFiltered), [cardFiltered]);
+
+  // Every column still renders: the Done column has to remain a drop target even
+  // while its cards are filtered out, or a task could never be completed. Only
+  // the visible cards are listed, and the header says how many are hidden.
+  const columns = useMemo(
+    () =>
+      columnsFor(cardFiltered).map((c) => {
+        const visible = filterByStatus(c.tasks, hiddenStatuses);
+        return { ...c, tasks: visible, hidden: c.tasks.length - visible.length };
+      }),
+    [cardFiltered, hiddenStatuses],
+  );
   const today = useMemo(() => todayISO(), []);
 
   const priorityOptions = useMemo(
@@ -211,6 +232,39 @@ export default function TasksView() {
     </div>
   );
 
+  // Status filter row: a chip per status with its count, so nothing is silently
+  // invisible — plus a one-click escape when the filter is hiding work.
+  const statusRow = (
+    <div className="tasks-toolbar status-row">
+      <span className="tasks-filter-label">Status</span>
+      <div className="tasks-status-chips" role="group" aria-label="Filter by status">
+        {facets.map((f) => {
+          const shown = !hiddenStatuses.includes(f.id);
+          return (
+            <button
+              key={f.id}
+              className={`status-chip ${shown ? 'on' : 'off'}`}
+              data-status={f.id}
+              aria-pressed={shown}
+              title={shown ? `Hide ${f.label} (${f.count})` : `Show ${f.label} (${f.count})`}
+              onClick={() => setHiddenStatuses((cur) => (shown ? [...cur, f.id] : cur.filter((s) => s !== f.id)))}
+            >
+              <span className={`status-chip-dot chip-${f.canonical ? f.id : 'unknown'}`} />
+              <span className="status-chip-label">{f.label}</span>
+              <span className="status-chip-count">{f.count}</span>
+            </button>
+          );
+        })}
+      </div>
+      <span className="grow" />
+      {hiddenCount > 0 && (
+        <button className="tasks-show-all" onClick={() => setHiddenStatuses([])}>
+          {hiddenCount} hidden — show all
+        </button>
+      )}
+    </div>
+  );
+
   if (!loading && !loadError && tasks.length === 0) {
     return (
       <div className="tasks-view">
@@ -235,9 +289,10 @@ export default function TasksView() {
   return (
     <div className="tasks-view">
       {toolbar}
+      {statusRow}
       {loadError && <div className="tasks-error">{loadError}</div>}
       {mode === 'timeline' ? (
-        <GanttChart tasks={filtered} onOpen={openFile} />
+        <GanttChart tasks={visibleTasks} onOpen={openFile} />
       ) : (
         <div className="tasks-board">
         {columns.map((col) => (
@@ -259,6 +314,11 @@ export default function TasksView() {
             <div className="task-column-head">
               <span className="task-column-title">{col.label}</span>
               <span className="task-column-count">{col.tasks.length}</span>
+              {col.hidden > 0 && (
+                <span className="task-column-hidden" title={`${col.hidden} hidden by the status filter`}>
+                  +{col.hidden} hidden
+                </span>
+              )}
             </div>
             <div className="task-column-body">
               {col.tasks.map((t) => (
@@ -315,7 +375,9 @@ export default function TasksView() {
                   <div className="task-card-path">{t.path}</div>
                 </div>
               ))}
-              {col.tasks.length === 0 && <div className="task-column-empty">No tasks</div>}
+              {col.tasks.length === 0 && (
+                <div className="task-column-empty">{col.hidden > 0 ? 'All hidden by the status filter' : 'No tasks'}</div>
+              )}
             </div>
           </div>
         ))}
