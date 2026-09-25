@@ -6,6 +6,9 @@ import { findNode } from './tree';
 export const CLIENT_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export type ViewMode = 'live' | 'source' | 'reading';
+/** Board | Timeline mode of the Tasks view (FR-16). Part of the URL, so a
+ *  `/tasks?mode=timeline` deep link survives a reload. */
+export type TasksMode = 'board' | 'timeline';
 export type TreeSort =
   | 'name-asc' | 'name-desc'
   | 'mtime-desc' | 'mtime-asc'
@@ -183,6 +186,10 @@ interface AppState {
   resetGraphSettings: () => void;
   /** Open (or focus) the Tasks board tab (FR-15). */
   openTasks: () => Promise<void>;
+  /** Deliberately NOT in PERSIST_KEYS: the URL owns this on load, so a
+   *  restored workspace can never override `/tasks?mode=timeline`. */
+  tasksMode: TasksMode;
+  setTasksMode: (m: TasksMode) => void;
 
   contextMenu: ContextMenuState | null;
   openContextMenu: (m: ContextMenuState) => void;
@@ -363,6 +370,8 @@ export const useStore = create<AppState>()(
       dirty: false,
       viewMode: 'live',
       setViewMode: (m) => set({ viewMode: m }),
+      tasksMode: 'board',
+      setTasksMode: (m) => set({ tasksMode: m }),
 
       expanded: [],
       toggleFolder: (path) =>

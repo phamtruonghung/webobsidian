@@ -1,7 +1,15 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.9 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Phiên bản: 1.10 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Changelog 1.10 (FR-16 — Tasks view: Timeline/Gantt, phần 2/2 của FR-15, issue #32): thêm chế độ
+> **Timeline** trong cùng Tasks view — mỗi task một thanh `raised`→`due` (fallback `created`, thiếu
+> `due` → thanh nét đứt mở chạy tới hôm nay), module thuần `web/src/lib/gantt.ts` tính trên chỉ số
+> ngày UTC (không lệch ngày vì DST), dải tự fit + pad 3 ngày, zoom Day/Week/Month, đường hôm nay,
+> thanh quá hạn viền đỏ; cột trái sticky + cuộn ngang. Mode Board|Timeline nằm trong store
+> (`tasksMode`, **không** persist) và **URL là nguồn sự thật lúc load** — sửa bug `/tasks?mode=timeline`
+> bị `urlsync` ghi đè thành `/tasks` khi restore, rơi âm thầm về board (có test hồi quy). Không
+> thêm endpoint/dependency runtime; không dependency-arrow/auto-scheduling/critical path (non-goal).
 > Changelog 1.9 (FR-15 — Tasks view: Kanban board trên ghi chú `type: task`, theo yêu cầu người dùng
 > issue #31): thêm **Tasks view** dạng **Kanban** phủ lên các note có frontmatter `type: task` (nguồn
 > sự thật vẫn là vault markdown, không DB/sync mới). 4 cột chuẩn `open→Backlog`, `in-progress→Doing`,
@@ -544,6 +552,54 @@ Timeline/Gantt dựng trên cùng shell Tasks view).
   không WIP limit, không cấu hình cột tuỳ ý.
 
 ---
+
+### FR-16 · Tasks view — Timeline (Gantt) (phần 2/2 của FR-15)
+Mục tiêu: chế độ **Timeline (Gantt)** trong cùng Tasks view (issue #32): mỗi task một thanh từ ngày bắt
+đầu đến `due` để nhìn tải công việc theo trục thời gian. Dựng trên shell của FR-15 (filter bar, dữ liệu
+`GET /api/tasks`, điều hướng `tasks://view`), không thêm DB/sync/tool ngoài.
+
+- **Hợp đồng dữ liệu**: thanh chạy **`raised` → `due`** (fallback `created`, thiếu cả hai → hôm nay).
+  **Không thêm field frontmatter nào** (một field `start:` thật là quyết định riêng, chưa làm). `due`
+  thiếu / `none` / không phải `YYYY-MM-DD` → thanh **nét đứt, mở**, chạy tới hôm nay, có nhãn "no due".
+  `due` < ngày bắt đầu (dữ liệu sai) → kẹp về 1 ngày, không bao giờ có width âm. **Quá hạn** = `due` <
+  hôm nay và `status ≠ done` — đúng quy tắc `isOverdue` của board.
+- **Toạ độ & thuật toán** (module thuần `web/src/lib/gantt.ts`, test được không cần DOM/clock): mọi
+  phép tính trên **chỉ số ngày UTC** (`YYYY-MM-DD` → số ngày từ epoch) nên DST/múi giờ không thể làm
+  thanh hay đường hôm nay lệch một ngày.
+  - **Dải thời gian** = min/max của mọi thanh **và hôm nay**, cộng **pad 3 ngày** mỗi bên; không có task
+    → cửa sổ **±15 ngày** quanh hôm nay. Hôm nay luôn nằm trong dải (đường hôm nay không bao giờ ra
+    ngoài trục).
+  - **`pxPerDay`**: Day 40 · Week 16 · Month 4; **`MIN_BAR_PX = 8`** (task trong cùng một ngày vẫn thấy
+    và click được ở zoom tháng). Độ dài thanh tính **bao gồm cả hai đầu** — task `due` ngay ngày `raised`
+    = 1 ngày.
+  - **Trục** (`ticksFor`): Day = mỗi ngày (nhãn `MM-DD` ở thứ Hai, còn lại là số ngày); Week = mỗi thứ
+    Hai; Month = ngày 1 mỗi tháng. Dải không chứa mốc nào → vẫn có 1 nhãn ở đầu dải (trục không bao giờ
+    trống nhãn).
+- **Hiển thị**: thanh màu theo trạng thái (cùng hệ màu cột board; trạng thái lạ = `status-unknown`),
+  badge priority trên thanh, quá hạn = **viền đỏ**, mở = **nét đứt**; **đường hôm nay** (đỏ) đánh dấu
+  *đầu* ngày hôm nay — thanh kết thúc hôm nay phủ trọn cột ngày đó. Cột trái (title + priority/owner/due)
+  **sticky**, toàn bộ cuộn ngang (pan) bằng scroll native kể cả cảm ứng; nút Day/Week/Month + nút cuộn
+  về hôm nay (chỉ tự cuộn ở lần mount đầu, không giật lại mỗi lần refresh). Click **thanh** hoặc **nhãn
+  dòng** → mở note; tooltip = title · status · owner · start → due.
+- **Điều hướng & deep link**: mode Board|Timeline là **state của app** (`tasksMode` + `setTasksMode`
+  trong store, **cố ý không** nằm trong `PERSIST_KEYS`) và **URL là nguồn sự thật lúc load**:
+  `/tasks?mode=timeline`, bare `/tasks` = board. `pathToUrl(TASKS_PATH, tasksMode)` sinh kèm query,
+  `modeFromUrl(pathname, search)` đọc lại lúc boot; command palette thêm "Open tasks timeline".
+  **Lý do (bug đã gặp, có test hồi quy)**: `urlsync` là nơi duy nhất ghi URL và nó dựng URL **từ
+  activePath** — không mang theo mode thì mỗi lần restore/reload, `/tasks?mode=timeline` bị ghi đè thành
+  `/tasks` và **âm thầm rơi về board**; và nếu persist `tasksMode` thì state khôi phục (`board`) lại đè
+  mode mà URL yêu cầu ngay sau `initUrlSync`.
+- **Non-goals (v1, cố ý — không làm)**: không dependency/arrow, không auto-scheduling, không critical
+  path, không baseline, không kéo-thả để dời ngày, không cascade ngày, không milestone, không export/
+  print. **Không thêm dependency runtime** (toàn bộ là số học + CSS). Không đổi server (không endpoint
+  mới) nên `deploy/smoke.sh` giữ nguyên.
+- **Kiểm thử**: unit test thuần `web/tests/gantt.test.ts` (parse ngày/kẹp ngày sai, nguồn ngày bắt đầu,
+  mở/quá hạn, pad + luôn chứa hôm nay, cửa sổ rỗng, hình học thanh + floor, đường hôm nay, nhãn trục
+  theo từng zoom, fallback 1 nhãn) và `web/tests/urlsync.test.ts` (`pathToUrl` mang mode, `modeFromUrl`,
+  default của store). Kiểm chứng DOM thật bằng headless Chromium trên vault fixture: hình học **từng
+  thanh so với kỳ vọng tính độc lập bằng Python** từ frontmatter, lớp overdue/open-ended/unknown, đường
+  hôm nay, nhãn trục, 3 mức zoom, click thanh/nhãn mở note, toggle, **reload giữ timeline**, cuộn ngang
+  ở 390px, không lỗi console.
 
 ## 4. Yêu cầu phi chức năng (NFR)
 - **Bảo mật**: password hash scrypt, JWT secret tự sinh, API key hash khi lưu, path traversal guard

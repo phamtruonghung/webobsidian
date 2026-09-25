@@ -7,6 +7,18 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 ## [Unreleased]
 
 ### Added
+- **Tasks timeline (Gantt)** — second mode of the Tasks view (`/tasks?mode=timeline`, command
+  palette "Open tasks timeline"): one bar per `type: task` note from `raised` (fallback `created`)
+  to `due`; a task with no usable due date is dashed and open-ended, running to today. Day/week/
+  month zoom, a fitted range padded by three days, a today line, status-coloured bars (unmapped
+  statuses get their own colour) with priority badges, red outline when overdue, sticky title
+  column and horizontal panning (touch included). Click a bar or its row label to open the note.
+  Geometry is pure UTC-day arithmetic in `web/src/lib/gantt.ts`; no new runtime dependency, no
+  server change. Deliberately no dependencies, auto-scheduling, critical path or drag-to-
+  reschedule. *(PRD 1.10 - FR-16, issue #32)*
+- **The Tasks mode is part of the URL again**: `tasksMode` lives in the store (not persisted) and
+  `pathToUrl`/`modeFromUrl` carry it, fixing a reload of `/tasks?mode=timeline` being rewritten to
+  the bare `/tasks` and silently falling back to the board. *(issue #32)*
 - **Tasks view — Kanban board over `type: task` notes** (`/tasks`, `TASKS_PATH = 'tasks://view'`,
   ribbon entry, command palette "Open tasks board"): four canonical columns (`open` → Backlog,
   `in-progress` → Doing, `blocked` → Blocked, `done` → Done, plus aliases like `todo`/`wip`/`waiting`);
