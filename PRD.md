@@ -1,7 +1,18 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.8 · Cập nhật: 2026-09-20 · Trạng thái: Draft
+> Phiên bản: 1.9 · Cập nhật: 2026-09-25 · Trạng thái: Draft
+> Changelog 1.9 (FR-15 — Tasks view: Kanban board trên ghi chú `type: task`, theo yêu cầu người dùng
+> issue #31): thêm **Tasks view** dạng **Kanban** phủ lên các note có frontmatter `type: task` (nguồn
+> sự thật vẫn là vault markdown, không DB/sync mới). 4 cột chuẩn `open→Backlog`, `in-progress→Doing`,
+> `blocked→Blocked`, `done→Done` (có alias); giá trị `status` lạ → cột riêng, thiếu `status` → Backlog
+> kèm dấu chấm "no status field". Kéo thẻ đổi cột ghi lại `status:`/`updated:` vào frontmatter qua
+> `PUT /api/files/content` với **compare-and-set tuỳ chọn** (`GET` trả thêm `version`, `PUT` nhận
+> `baseVersion` — lệch thì `409 version_conflict`, không đè mù; không truyền thì hành vi cũ giữ
+> nguyên). API mới `GET /api/tasks` (session) và `GET /api/v1/tasks` (Agent API, scope `read`) trả
+> bản ghi đã chuẩn hoá, tái dùng index QMD sẵn có (không quét lại vault mỗi request). Điều hướng theo
+> đúng khuôn `graph://view`: `tasks://view` + `openTasks()`, URL `/tasks?mode=board|timeline` (mode
+> `timeline` để dành cho FR-16/#32), ribbon + command palette.
 > Changelog 1.8 (FR-6 — Agent API đọc–sửa an toàn + MCP server): mọi lần đọc trả `version`
 > (sha256 nội dung, không phụ thuộc mtime nên autosync git không tạo conflict giả); `PUT`/`PATCH`
 > nhận `base_version` để compare-and-set (`""` = bắt buộc chưa tồn tại), lệch → `409 version_conflict`
@@ -456,6 +467,82 @@ Express + SPA hiện có (không fork code, không đổi kiến trúc) — nên
 - **Phạm vi (non-goals)**: chưa auto-update (người dùng tải bản mới thủ công); chưa ký số; không nhúng git
   portable; không chạy nhiều cửa sổ/vault song song trong 1 instance (single-instance lock).
 
+### FR-15 · Tasks view — Kanban board (ghi chú `type: task`)
+Mục tiêu: cho hệ thống task sẵn có trong vault (`Wiki/tasks/*.md` + `Wiki/templates/task.md`, mang
+`status`/`priority`/`owner`/`due`/`raised`/`sources`) một **view**, không phải data model mới — bản thân
+markdown vẫn là nguồn sự thật, không thêm DB/sync/tool ngoài. Phần 1/2 (xem FR-16/issue #32 cho
+Timeline/Gantt dựng trên cùng shell Tasks view).
+
+- **Phạm vi & nguồn dữ liệu**: một note là task khi frontmatter có `type: task` (so khớp string, trim,
+  không phân biệt hoa/thường). Note chứa checkbox `- [ ]` **không** phải task trong view này (non-goal —
+  không gom `- [ ]`, không Dataview query). **Loại trừ template**: note nằm trong bất kỳ thư mục có
+  segment tên `templates` (không phân biệt hoa/thường) không được coi là task dù mang `type: task` —
+  quy tắc này áp cho chính `Wiki/templates/task.md`.
+- **Hợp đồng trạng thái → cột**: 4 cột chuẩn theo thứ tự `open`→**Backlog**, `in-progress`→**Doing**,
+  `blocked`→**Blocked**, `done`→**Done**. Alias (không phân biệt hoa/thường, đã trim): `todo`→`open`;
+  `doing`/`wip`→`in-progress`; `waiting`/`on-hold`→`blocked`; `closed`/`completed`/`complete`→`done`.
+  Giá trị `status` không khớp canonical/alias nào → **cột riêng của nó**, nhãn = giá trị thô, xếp sau 4
+  cột chuẩn (nhiều cột lạ thì sắp theo alphabet); đọc **không bao giờ** âm thầm ép/ghi lại giá trị đó.
+  Thiếu key `status` → nằm ở **Backlog**, đánh dấu **chấm nhỏ + tooltip "no status field"**; kéo thẻ đó
+  sang cột khác sẽ **thêm** key `status` (data được "sửa" như tác dụng phụ của thao tác kéo).
+- **Điều hướng**: theo đúng khuôn `graph://view`/`openGraph()` — `TASKS_PATH = 'tasks://view'` +
+  `openTasks()` trong store (tab tiêu đề "Tasks"), route `/tasks?mode=board|timeline` (mặc định
+  `board`; option `timeline` **ẩn** ở phần 1, dành cho FR-16/#32), ribbon (icon riêng) và command
+  palette ("Open tasks board"). Mọi chỗ trong `web/src` so sánh `GRAPH_PATH` như "virtual view, không
+  phải file" đều xử lý `TASKS_PATH` tương tự (tree/tab restore, history, back/forward, `urlsync.ts`).
+- **UX thẻ & cột**: header cột = tên + số thẻ; cuộn ngang, kích thước chạm được trên mobile (PRD FR-11).
+  Thẻ hiển thị title (`title:` frontmatter, fallback tên file), badge priority (`P1`/`P2`/`P3`), owner,
+  due date (đỏ khi `due` < hôm nay và `status ≠ done`), tags, đường dẫn vault làm hint. Click thẻ →
+  mở note bằng hành vi mở file hiện có (không route mới). Kéo thẻ giữa cột (HTML5 drag & drop, không
+  thêm dependency) **và** menu chuột phải/nút "⋯" → "Move to → <tên cột>" cho mọi cột khác (fallback
+  cho chạm/không kéo-thả). Optimistic update: sai thì khôi phục cột cũ + `notify('Could not move
+  "<title>": <message>')`.
+- **Bộ lọc**: phạm vi thư mục (mặc định "Whole vault"), priority, owner, free-text theo title. Nút
+  Refresh thủ công + auto-refresh (debounce ~500ms) khi WebSocket báo thay đổi `.md` trong phạm vi lọc
+  (sự kiện `wo-fs` mà `App.tsx` đã phát cho tree). Empty state giải thích quy ước `type: task` và link
+  thẳng tới `Wiki/templates/task.md`.
+- **Hợp đồng ghi**: kéo/"Move to" chỉ đổi **dòng `status:`** (chèn sau `type:` nếu có, không thì làm
+  dòng cuối cùng của block frontmatter; không có frontmatter thì tạo mới, giữ nguyên phần thân) và
+  set `updated: <YYYY-MM-DD>` (ngày đổi) — **không đụng** field khác, thứ tự key khác hay phần thân.
+  Ghi qua đường ghi note sẵn có (`PUT /api/files/content`) kèm **compare-and-set tuỳ chọn**: `GET`
+  trả thêm `version` (content-hash, giống cơ chế FR-6), `PUT` nhận `baseVersion` tuỳ chọn — lệch với
+  bản hiện tại → `409 { error: 'version_conflict', currentVersion }`, không ghi; file đã bị xoá/đổi tên
+  mà `baseVersion ≠ ''` cũng → `409` (cùng ngữ nghĩa `base_version` của Agent API — không "hồi sinh"
+  note); không truyền thì hành vi cũ giữ nguyên (autosave editor không đổi). Giá trị trạng thái ghi trần
+  khi YAML đọc lại đúng chuỗi đó, còn lại (số, có khoảng trắng, `yes`/`no`/`null`…) được quote. Thất bại
+  (kể cả 409) → rollback optimistic UI ở trên (chỉ thẻ vừa kéo).
+- **API server**: `GET /api/tasks?folder=&status=&priority=&owner=&q=` (cookie session, cùng guard các
+  route web khác) và mirror đọc `GET /api/v1/tasks` (Agent API, scope `read`) — cùng query, cùng hình
+  dạng response `{ tasks: TaskRecord[] }` (sắp theo `path`):
+  ```ts
+  interface TaskRecord {
+    path: string; title: string;            // fallback tên file khi thiếu title
+    status: string;                          // id canonical/alias, hoặc giá trị thô khi lạ, 'open' khi thiếu
+    statusRaw: string | null;                // giá trị thô trong frontmatter, null khi thiếu/rỗng
+    priority: string | null; owner: string | null;
+    due: string | null; raised: string | null; created: string | null; updated: string | null; // 'YYYY-MM-DD' hoặc chuỗi thô khác
+    tags: string[];
+  }
+  ```
+  Tái dùng parser frontmatter sẵn có (`server/src/services/markdown.ts`) và **index sẵn có** (QMD
+  engine, `server/src/services/search.ts`) — không quét lại vault mỗi request: mỗi note đã parse khi
+  build/upsert index (`toDoc`) nay tính kèm `TaskRecord` (hàm thuần `taskRecordFrom`), lưu trong
+  `qmd.allTasks()`, cập nhật đồng bộ với mọi đường ghi + watcher đã gọi `qmd.upsert` từ trước. Map task
+  **không** persist vào `data/qmd-index.json`: khi boot khôi phục index từ đĩa, server quét vault **một
+  lần** (`qmd.refreshTasks()`) để board phản ánh đúng các note sửa lúc server tắt (vd. `git pull` khi
+  deploy — watcher `ignoreInitial` không báo) thay vì trạng thái của lần build index đầy đủ gần nhất.
+- **Kiểm thử**: unit test thuần cho normalise trạng thái/alias/giá trị lạ/thiếu, chọn task theo
+  `type: task` (kèm loại trừ `templates`), từng filter, `setTaskStatus`/chèn `updated`, `isOverdue` —
+  cả hai phía server (`server/src/**/*.test.ts`) và web (`web/tests/`, twin logic giữ đồng bộ bằng
+  comment trỏ chéo). Test route: chọn đúng task, từng filter, 401 thiếu session, `/api/v1/tasks` 401
+  thiếu key/403 thiếu scope `read`/200 khi đủ, CAS (GET có `version`, PUT `baseVersion` cũ → 409 và
+  file không đổi, `baseVersion` đúng → 200). `deploy/smoke.sh` thêm assertion `GET /api/tasks` không
+  session → 401.
+- **Phạm vi v1 (non-goals)**: không gom `- [ ]` checkbox, không ngôn ngữ truy vấn kiểu Dataview, không
+  plugin/proxy layer mới, không phụ thuộc tracker ngoài (Jira/Trello…), không realtime multi-user
+  editing, không tạo thẻ mới từ board (note vẫn tạo trong app/agent như hiện tại), không swimlane,
+  không WIP limit, không cấu hình cột tuỳ ý.
+
 ---
 
 ## 4. Yêu cầu phi chức năng (NFR)
@@ -489,8 +576,8 @@ POST   /auth/logout
 POST   /auth/change-password  # đổi pass: { currentPassword, newPassword } (yêu cầu auth)
 GET    /auth/me
 GET    /api/files            # cây thư mục
-GET    /api/files/*path      # đọc file (md/binary)
-PUT    /api/files/*path      # ghi
+GET    /api/files/*path      # đọc file (md/binary); note text kèm `version` (content-hash, CAS)
+PUT    /api/files/*path      # ghi; nhận `baseVersion` tuỳ chọn (CAS) → lệch `409 version_conflict`
 POST   /api/files/*path      # tạo / upload
 PATCH  /api/files            # rename/move
 POST   /api/files/copy       # copy đệ quy file/folder {from,to} (Paste sau Copy)
@@ -500,6 +587,7 @@ POST   /api/files/trash/restore   # khôi phục {path} về vị trí gốc
 DELETE /api/files/trash/item # xoá vĩnh viễn 1 item trong trash
 DELETE /api/files/trash      # empty trash (xoá hẳn toàn bộ)
 GET    /api/search?q=...
+GET    /api/tasks?folder=&status=&priority=&owner=&q=   # board tasks (ghi chú type: task), { tasks }
 GET    /api/backlinks?path=...
 GET    /api/git/status | POST /api/git/{pull,commit,push,sync}
 GET/PUT /api/settings
@@ -532,6 +620,7 @@ GET    /api/v1/note-matches?path=&q=&case_sensitive=&limit=&context=
 GET    /api/v1/search?q=...&limit=
 GET    /api/v1/backlinks?path=
 GET    /api/v1/tags
+GET    /api/v1/tasks?folder=&status=&priority=&owner=&q=   # board tasks, scope `read`, { tasks }
 ```
 
 ---

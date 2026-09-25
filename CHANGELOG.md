@@ -6,6 +6,22 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Added
+- **Tasks view — Kanban board over `type: task` notes** (`/tasks`, `TASKS_PATH = 'tasks://view'`,
+  ribbon entry, command palette "Open tasks board"): four canonical columns (`open` → Backlog,
+  `in-progress` → Doing, `blocked` → Blocked, `done` → Done, plus aliases like `todo`/`wip`/`waiting`);
+  an unrecognised `status` value gets its own column, a missing one lands in Backlog with a "no status
+  field" marker. Drag a card (or use the "⋯" context menu) to change its column — this rewrites only
+  the `status:` and `updated:` frontmatter lines through the existing file write path, with an
+  optimistic-UI rollback and error notice on failure. Filter bar (folder scope, priority, owner,
+  free-text) with manual refresh and vault-watcher auto-refresh. New endpoints `GET /api/tasks` and
+  `GET /api/v1/tasks` (Agent API, `read` scope) return the normalised task records, backed by the
+  existing search index (no extra vault walk). *(PRD 1.9 - FR-15, issue #31)*
+- `GET`/`PUT /api/files/content` gain an optional compare-and-set pair (`version` on read,
+  `baseVersion` on write) so a stale write — or one aimed at a note deleted/renamed meanwhile — is
+  rejected with `409 version_conflict` instead of clobbering (or resurrecting) it; omitting
+  `baseVersion` keeps the previous (unconditional) write behaviour. *(PRD 1.9 - FR-15)*
+
 ### Dark themes — visible caret, and CodeMirror's Find panel follows the theme
 
 - **The caret is no longer black on a dark theme.** `drawSelection()` hides the native caret

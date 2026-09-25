@@ -133,6 +133,9 @@ scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head and merge 
   Mermaid diagrams.
 - 🕸️ **Graph view** — force-directed graph built from your wikilinks, with fly-to node
   search and highlighting.
+- 🗂️ **Tasks board** — Kanban view over `type: task` notes (`/tasks`); drag a card to change its
+  `status:` frontmatter, filter by folder/priority/owner/title, `GET /api/tasks` (and
+  `/api/v1/tasks` for agents).
 - 🔗 **Backlinks & outline** — right sidebar tab strip: Backlinks (linked **and** unlinked
   mentions), Outgoing links (resolved/unresolved), Tags and Outline.
 - 🔍 **QMD search** — fast full-text + fielded search (`tag:`, `path:`, `title:`), fuzzy +

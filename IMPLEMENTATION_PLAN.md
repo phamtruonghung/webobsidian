@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-25 (FR-2 — Live Preview: click đúng dòng + dark mode: caret/panel Find theo theme)
+Cập nhật lần cuối: 2026-09-25 (FR-15 — Tasks view: Kanban board trên ghi chú `type: task`, issue #31)
 
 ---
 
@@ -494,7 +494,67 @@ Cập nhật lần cuối: 2026-09-25 (FR-2 — Live Preview: click đúng dòng
       (Obsidian Dark — trước là `#000`), `#222222`/trắng (light), `#cdd6f4`/`#1e1e2e` (Catppuccin Mocha);
       panel `rgb(38,38,38)`/chữ `#dadada`, light `#f6f6f6`, ctp-mocha `#181825`. Guard: `web/tests/editorTheme.test.ts`.
 
+## Phase 34 — Tasks view: Kanban board over `type: task` notes — FR-15 (issue #31)
+- [x] M34.1 `server/src/services/tasks.ts`: module thuần chuẩn hoá `status`→cột (canonical + alias),
+      `taskRecordFrom(rel, parsedNote)` (loại trừ folder `templates`), `filterTasks`; unit test
+      `server/src/services/tasks.test.ts`.
+- [x] M34.2 Tích hợp vào QMD index (`server/src/services/search.ts`): `tasks: Map<string, TaskRecord>`
+      tính trong `toDoc`, xoá trong `remove`, reset trong `build`; **không** persist — sau `restore()` lúc
+      boot gọi `qmd.refreshTasks()` (quét vault 1 lần) để không phục vụ trạng thái cũ sau restart
+      (test `server/src/services/search.test.ts`); expose `qmd.allTasks()`.
+- [x] M34.3 `server/src/routes/tasks.ts` (`GET /api/tasks`, cookie auth) + `agentRouter.get('/tasks', …)`
+      scope `read` trong `server/src/routes/agent.ts`; mount `/api/tasks` trước `searchRouter` trong
+      `server/src/index.ts`. Test `server/src/routes/tasks.test.ts` (chọn task, từng filter, 401/403/200).
+- [x] M34.4 Compare-and-set trên đường ghi file hiện có: `GET /api/files/content` trả thêm `version`
+      (`server/src/services/noteversion.ts`, helper `checkVersion`); `PUT /api/files/content` nhận
+      `baseVersion` tuỳ chọn → lệch (hoặc file đã mất mà `baseVersion ≠ ''`) `409 version_conflict`
+      (không ghi), absent thì hành vi cũ giữ nguyên. Test CAS trong `routes/tasks.test.ts` +
+      `services/noteversion.test.ts`.
+- [x] M34.5 `web/src/lib/tasks.ts`: twin normalise trạng thái/alias/cột (đồng bộ comment với module
+      server), `columnsFor`, `columnIdFor`, `isMissingStatus`, `isOverdue`, `moveTask`, `setTaskStatus`
+      (chèn/thay `status:`/`updated:`, giữ nguyên phần còn lại + line ending), `changeTaskStatus` (dùng
+      `api`, truyền `version` làm base, propagate lỗi 409). Unit test `web/tests/tasks.test.ts`.
+- [x] M34.6 Wiring: `web/src/lib/store.ts` (`TASKS_PATH = 'tasks://view'` + `openTasks()`, mọi chỗ so
+      sánh `GRAPH_PATH` như virtual view audit lại cho `TASKS_PATH`), `web/src/lib/urlsync.ts`
+      (`/tasks` ↔ `TASKS_PATH`, `?mode=`), ribbon (icon "Tasks"), command palette ("Open tasks board").
+- [x] M34.7 `web/src/components/TasksView.tsx`: cột + thẻ (title/priority/owner/due/tags/path hint,
+      dấu chấm "no status"), kéo-thả HTML5 giữa cột + context menu "Move to → …", filter bar
+      (folder/priority/owner/free-text) + Refresh thủ công + auto-refresh debounce theo sự kiện
+      `wo-fs`, mode toggle Board|Timeline (Timeline ẩn ở phần 1), empty state link
+      `Wiki/templates/task.md`, style dark/light qua CSS variable sẵn có.
+- [x] M34.8 `deploy/smoke.sh`: assertion `GET /api/tasks` không session → 401; có `env_pw` thì login +
+      assert 200 với JSON `tasks` array.
+- [x] M34.9 Docs: PRD.md (FR-15 + changelog), IMPLEMENTATION_PLAN.md (phase này), CHANGELOG.md
+      (Unreleased/Added), README.md (feature list), docs/AGENT_API.md (`GET /api/v1/tasks`).
+- [x] M34.10 Kiểm chứng thật trên vault fixture: `/tasks` render đúng 6 note `Wiki/tasks/`, cột lạ/thiếu
+      status đúng quy tắc; kéo thẻ đổi `status:`/`updated:` trong file thật (paste `git diff`); ghi lỗi
+      (409/mất mạng) → rollback + notify; `curl` `GET /api/tasks` và `GET /api/v1/tasks`.
+- [ ] M34.11 Kiểm chứng deploy: sau khi merge, LXC 107 `/healthz.build` == merge commit và `/tasks` được
+      phục vụ từ build đó (paste curl output) — theo runbook docs/DEPLOYMENT.md.
+
 ### Nhật ký tiến độ
+- 2026-09-25 (FR-15 — Tasks view: Kanban board trên ghi chú `type: task`, issue #31): mở **Phase 34**
+  theo plan 2 workstream song song (server: `server/**` + `deploy/smoke.sh` + `docs/AGENT_API.md`; web:
+  `web/**`) cộng workstream docs (PRD/PLAN/CHANGELOG/README) chạy song song trong cùng phiên. Quyết định
+  khung (ghi ở PRD FR-15): 2 module thuần song sinh `server/src/services/tasks.ts` +
+  `web/src/lib/tasks.ts` cùng bảng canonical/alias; 4 cột chuẩn `open/in-progress/blocked/done`, giá trị
+  lạ → cột riêng, thiếu `status` → Backlog + dấu chấm; QMD index (`search.ts`) tính sẵn `TaskRecord` khi
+  `toDoc` để `GET /api/tasks` + `GET /api/v1/tasks` (scope `read`) không quét lại vault mỗi request;
+  compare-and-set tuỳ chọn (`version`/`baseVersion`) thêm vào `GET`/`PUT /api/files/content` mà không
+  đổi hành vi autosave cũ; điều hướng theo khuôn `graph://view` (`tasks://view` + `openTasks()`,
+  `/tasks?mode=board|timeline`, Timeline ẩn ở phần 1, để dành cho FR-16/#32). Code review 2 trục
+  (standards + spec) sửa thêm: CAS khi file đã mất → 409 (không hồi sinh note), twin server/web trim
+  status giống nhau, quote giá trị YAML dễ hiểu nhầm (`yes`/`null`/số), rollback chỉ thẻ vừa kéo, thả vào
+  chính cột hiện tại không ghi, `isViewPath()` cho các view ảo; và **map task không persist** — boot
+  sau `restore()` quét vault 1 lần (`refreshTasks()`) vì index persist chỉ ghi khi build đầy đủ (restart
+  sẽ hiện trạng thái cũ). **Kiểm chứng**: `npm test` 143 server + 64 web xanh (test mới đỏ trên
+  `origin/main`); typecheck + build xanh; server chạy trên bản sao vault fixture (6 note `Wiki/tasks/` +
+  2 fixture): `GET /api/tasks` 8 bản ghi (template bị loại), 401 khi thiếu session, từng filter lọc
+  đúng; `GET /api/v1/tasks` 401 thiếu key / 403 thiếu scope `read` / 200; `changeTaskStatus` thật →
+  `git diff` vault chỉ đổi `status:` + `updated:` (thiếu key → chèn sau `type:`), `baseVersion` cũ →
+  409; trình duyệt headless: cột/đánh dấu/đỏ quá hạn đúng, kéo thả ghi file, PUT lỗi → thẻ về cột cũ +
+  toast, cuộn ngang ở 390px, dark theme; `deploy/smoke.sh` 7/7 PASS; sửa note lúc server tắt → board
+  đúng sau restart. M34.1–M34.10 `[x]`; M34.11 (deploy LXC 107) chờ merge.
 - 2026-09-25 (FR-2 — dark mode: caret đen trên nền tối): báo cáo "đổi sang dark mode thì con trỏ màu
   đen, khó thấy". Nguyên nhân: `drawSelection()` ẩn caret gốc (`caret-color: transparent !important`)
   và tự vẽ `.cm-cursor`, màu border bị CodeMirror hard-code là `black`; biến thể `&dark` chỉ bật khi
