@@ -103,6 +103,29 @@ else
   echo "  SKIP  operator-password login (WEBOBSIDIAN_PASSWORD empty; UI password only)"
 fi
 
+# 5. Tasks board (FR-15): the route exists and is auth-guarded — a regression that
+# lets it fall through to the SPA (or drops the guard) fails the deploy here instead
+# of reaching the user. With the operator password available, also confirm it serves
+# real data once logged in.
+read -r code body < <(http GET /api/tasks)
+chk "GET /api/tasks without a session is 401" "401" "$code"
+
+if [[ -n "$env_pw" ]]; then
+  jar="$(mktemp)"
+  login_code="$(curl -s -m 15 -c "$jar" -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/login" \
+                -H 'Content-Type: application/json' -d "{\"password\":\"$env_pw\"}")"
+  if [[ "$login_code" == "200" ]]; then
+    tasks_code="$(curl -s -m 15 -b "$jar" -o /tmp/wo-smoke-tasks -w '%{http_code}' "$BASE/api/tasks")"
+    is_array="$(python3 -c "import json; d=json.load(open('/tmp/wo-smoke-tasks')); print('yes' if isinstance(d.get('tasks'), list) else 'no')" 2>/dev/null || echo unparseable)"
+    chk "GET /api/tasks with a session returns 200 + a tasks array" "200 yes" "$tasks_code $is_array"
+  else
+    echo "  FAIL  could not log in to check GET /api/tasks (login returned $login_code)"; fail=$((fail+1))
+  fi
+  rm -f "$jar"
+else
+  echo "  SKIP  GET /api/tasks 200 check (WEBOBSIDIAN_PASSWORD empty; UI password only)"
+fi
+
 echo
 echo "RESULT: $pass passed, $fail failed"
 exit $((fail > 0))
