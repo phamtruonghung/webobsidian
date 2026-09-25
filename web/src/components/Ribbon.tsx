@@ -7,6 +7,7 @@ export default function Ribbon({ onTheme }: { onTheme: () => void }) {
   const setLeftPanel = useStore((s) => s.setLeftPanel);
   const leftPanel = useStore((s) => s.leftPanel);
   const setGraph = useStore((s) => s.setGraph);
+  const openTasks = useStore((s) => s.openTasks);
   const setSettings = useStore((s) => s.setSettings);
   const setPalette = useStore((s) => s.setPalette);
   const openDailyNote = useStore((s) => s.openDailyNote);
@@ -48,6 +49,9 @@ export default function Ribbon({ onTheme }: { onTheme: () => void }) {
       </button>
       <button title="Graph view" onClick={() => setGraph(true)}>
         <Icon name="graph" size={18} />
+      </button>
+      <button title="Tasks" onClick={() => openTasks()}>
+        <Icon name="check-square" size={18} />
       </button>
       <button className={leftPanel === 'bookmarks' ? 'active' : ''} title="Bookmarks & recent" onClick={() => setLeftPanel('bookmarks')}>
         <Icon name="bookmark" size={18} />

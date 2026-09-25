@@ -14,6 +14,13 @@ const TREE_SORTS: TreeSort[] = ['name-asc', 'name-desc', 'mtime-desc', 'mtime-as
 
 /** Sentinel tab path for the Graph view (it lives in a tab, like Obsidian). */
 export const GRAPH_PATH = 'graph://view';
+/** Sentinel tab path for the Tasks board (FR-15) — a virtual view, not a file. */
+export const TASKS_PATH = 'tasks://view';
+
+/** True for a sentinel "virtual view, not a file" tab path (Graph, Tasks board). */
+export function isViewPath(path: string | null): boolean {
+  return path === GRAPH_PATH || path === TASKS_PATH;
+}
 
 export interface Tab {
   path: string;
@@ -174,6 +181,8 @@ interface AppState {
   graphSettings: GraphSettings;
   setGraphSettings: (patch: Partial<GraphSettings>) => void;
   resetGraphSettings: () => void;
+  /** Open (or focus) the Tasks board tab (FR-15). */
+  openTasks: () => Promise<void>;
 
   contextMenu: ContextMenuState | null;
   openContextMenu: (m: ContextMenuState) => void;
@@ -444,6 +453,21 @@ export const useStore = create<AppState>()(
         set((s) => ({ graphSettings: { ...s.graphSettings, ...patch } })),
       resetGraphSettings: () => set({ graphSettings: DEFAULT_GRAPH_SETTINGS }),
 
+      openTasks: async () => {
+        const request = ++openRequest;
+        if (get().dirty) await get().save();
+        if (request !== openRequest) return;
+        set((s) => ({
+          tabs: s.tabs.some((t) => t.path === TASKS_PATH)
+            ? s.tabs
+            : [...s.tabs, { path: TASKS_PATH, title: 'Tasks' }],
+          activePath: TASKS_PATH,
+          content: '',
+          dirty: false,
+          ...pushHistory(s, TASKS_PATH),
+        }));
+      },
+
       contextMenu: null,
       openContextMenu: (m) => set({ contextMenu: m }),
       closeContextMenu: () => set({ contextMenu: null }),
@@ -492,6 +516,7 @@ export const useStore = create<AppState>()(
 
       openFile: async (path, { preview = true } = {}) => {
         if (path === GRAPH_PATH) return get().openGraph();
+        if (path === TASKS_PATH) return get().openTasks();
         const request = ++openRequest;
         if (get().dirty) await get().save();
         if (request !== openRequest) return;

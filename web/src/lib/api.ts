@@ -56,6 +56,30 @@ export interface GitCommit {
   author: string;
 }
 
+// Tasks board (FR-15) query params. Keep in sync with server/src/services/tasks.ts's TaskFilter.
+export interface TaskQuery {
+  folder?: string;
+  status?: string;
+  priority?: string;
+  owner?: string;
+  q?: string;
+}
+
+// Tasks board (FR-15). Keep in sync with server/src/services/tasks.ts's TaskRecord.
+export interface TaskRecord {
+  path: string; // vault-relative
+  title: string; // frontmatter title, fallback file name without extension
+  status: string; // canonical id if canonical/alias; else the raw value unchanged; 'open' when missing
+  statusRaw: string | null; // raw frontmatter value as a string; null when the key is absent/empty
+  priority: string | null;
+  owner: string | null;
+  due: string | null; // 'YYYY-MM-DD' | other raw string (e.g. 'none') | null
+  raised: string | null;
+  created: string | null;
+  updated: string | null;
+  tags: string[];
+}
+
 async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
   const { headers: optHeaders, ...rest } = opts;
   const res = await fetch(url, {
@@ -111,9 +135,15 @@ export const api = {
   // files
   tree: () => req<TreeNode>('/api/files/'),
   read: (path: string) =>
-    req<{ path: string; content: string }>(`/api/files/content?path=${encodeURIComponent(path)}`),
-  write: (path: string, content: string) =>
-    req<{ ok: true }>('/api/files/content', { method: 'PUT', body: JSON.stringify({ path, content }) }),
+    req<{ path: string; content: string; encoding?: string; version?: string }>(
+      `/api/files/content?path=${encodeURIComponent(path)}`,
+    ),
+  // baseVersion (CAS): when given, the server rejects a stale write with 409 version_conflict.
+  write: (path: string, content: string, baseVersion?: string) =>
+    req<{ ok: true; path: string; version?: string }>('/api/files/content', {
+      method: 'PUT',
+      body: JSON.stringify({ path, content, ...(baseVersion !== undefined ? { baseVersion } : {}) }),
+    }),
   createFolder: (path: string) =>
     req<{ ok: true }>('/api/files/folder', { method: 'POST', body: JSON.stringify({ path }) }),
   rename: (from: string, to: string) =>
@@ -178,6 +208,16 @@ export const api = {
       edges: { source: string; target: string }[];
     }>('/api/graph'),
   reindex: () => req<{ ok: true }>('/api/reindex', { method: 'POST' }),
+
+  // tasks board (FR-15)
+  tasks: (params?: TaskQuery) => {
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value) qs.set(key, value);
+    }
+    const s = qs.toString();
+    return req<{ tasks: TaskRecord[] }>(`/api/tasks${s ? `?${s}` : ''}`);
+  },
 
   // ui state (workspace persistence, shared across browsers)
   getUiState: () => req<any>('/api/uistate/'),

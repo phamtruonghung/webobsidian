@@ -1,17 +1,20 @@
 // Deep-link URL sync (FR-10): the browser URL mirrors the open note as
-// /note/<vault-relative-path> (Graph view = /graph). Opening such a URL after
-// login opens the note; browser back/forward navigate via popstate.
-import { useStore, GRAPH_PATH } from './store';
+// /note/<vault-relative-path> (Graph view = /graph, Tasks board = /tasks).
+// Opening such a URL after login opens the note; browser back/forward
+// navigate via popstate.
+import { useStore, GRAPH_PATH, TASKS_PATH } from './store';
 
 export function pathToUrl(path: string | null): string {
   if (!path) return '/';
   if (path === GRAPH_PATH) return '/graph';
+  if (path === TASKS_PATH) return '/tasks';
   return `/note/${path.split('/').map(encodeURIComponent).join('/')}`;
 }
 
 /** Vault path encoded in a location pathname, or null if it isn't a deep link. */
 export function urlToPath(pathname: string): string | null {
   if (pathname === '/graph') return GRAPH_PATH;
+  if (pathname === '/tasks') return TASKS_PATH;
   if (pathname.startsWith('/note/')) {
     try {
       const rel = pathname.slice('/note/'.length).split('/').map(decodeURIComponent).join('/');

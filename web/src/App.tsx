@@ -82,6 +82,8 @@ export default function App() {
           // coalesce bursts of fs events into a single tree refresh
           window.clearTimeout(treeTimer);
           treeTimer = window.setTimeout(() => loadTree(), 800);
+          // let other views (e.g. the Tasks board) react to the raw event themselves
+          window.dispatchEvent(new CustomEvent('wo-fs', { detail: msg }));
         } else if (msg.type === 'uistate') {
           // another tab/device changed the workspace → sync live
           useStore.getState().applyRemoteState(msg.state, msg.originId);
