@@ -6,6 +6,37 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Live Preview — clicking a row no longer edits the row below it
+
+- **The caret now lands on the row you click.** CodeMirror builds its height map from border-box
+  rects and assumes blocks stack directly on top of each other, so vertical `margin`s between
+  blocks were invisible to it: the map ran short (a title + properties block + table made it 76px
+  short) and every click below a gap resolved one or two lines further down. Spacing for the note
+  title, properties block, table, the `` ```html `` render toggle, raw-HTML block and mermaid
+diagram is now
+  padding on the measured block, and the interactive table is `display: block; width: fit-content`
+  instead of `inline-block` (an inline-block's anonymous line box added ~7px the map could not see).
+  Every editor block is pixel-identical; the space the table's inline-block strut emitted is gone
+  (7px tighter below tables).
+- **Attachments that arrive after layout no longer desync the map.** An image (or an iframe) that
+  loads after CodeMirror measured the line left the map short by the image's height until the next
+  scroll or keystroke, which moved every click below it — `mediaLoadRemeasure` re-measures on
+  `load`/`error`.
+- **A line whose only content is a widget (an image row, say) now takes the caret too.** The
+  browser's own contenteditable caret placement picked a *neighbouring* line for clicks in the blank
+  part of such a row (the app's first-click fix could not stick against it). The caret is re-asserted
+  once the native handling has run, and the clicked row becomes active — so clicking an image row
+  behaves exactly like arriving on it with the keyboard (its embed source is revealed). Widgets that
+  own their interaction (tables, properties, media players, note transclusions) and drag-select are
+  untouched.
+- Guards so it cannot come back: `web/tests/editorSpacing.test.ts` (CI) fails on a vertical margin
+  on an editor block, and a dev-only `livePreviewGeometryGuard` warns in the console when the height
+  map is shorter than the rendered content. README › *Live Preview geometry* explains the rule.
+- Verified in a real browser (headless Chromium, local dev instance): 60/60 clicks across
+  widget-heavy, heading-heavy and wrapped-text notes put the caret on the clicked line (before the
+  fix: 17 of 22 clicks landed a line low), and every isolation note reports map height == rendered
+  height.
+
 ### Docs — the vault must never be git-synced to this repository
 
 - Added the warning to `docs/DEPLOYMENT.md` (with the recovery procedure and one-line checks) and a

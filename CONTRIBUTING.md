@@ -20,6 +20,11 @@ and design-driven — please read the few rules below before opening a PR.
 - **Runtime config is JSON only** (`data/settings.json`) — do not add a DB engine.
 - **Security:** never log secrets/tokens/API keys; hash before storing; guard against path
   traversal.
+- **Editor CSS:** vertical spacing on an element CodeMirror renders as a *block* must be
+  `padding`, never `margin`. CodeMirror's height map is built from border-box rects and assumes
+  blocks stack flush, so a vertical margin between two blocks is invisible to it and every click
+  below that gap lands one or two rows low. [README › Live Preview geometry](README.md) has the
+  details; `web/tests/editorSpacing.test.ts` fails CI if a margin reappears.
 - Match the style, naming, and comment density of the surrounding code.
 
 ## Development setup

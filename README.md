@@ -449,6 +449,32 @@ unified/remark/rehype · MiniSearch (QMD) · simple-git + git-lfs · scrypt + JW
 
 See [PRD.md §2](PRD.md) for the full design.
 
+### Live Preview geometry — why vertical margins break click placement
+
+CodeMirror positions the caret from a **height map** that it builds out of the border-box
+rects of the blocks it renders, and it assumes those blocks stack directly on top of each
+other. Space that a vertical `margin` contributes between two blocks never reaches that
+map: the map ends up shorter than the document, and everything below the gap maps to a
+document line that is one or two rows further down — you click a row and the caret lands
+on the next one. (Measured: a note title + properties block + table pushed every click two
+rows low; `contentDOM.scrollHeight` was 76px longer than the map.)
+
+So, inside the editor, **vertical spacing on an editor block is `padding`, never `margin`**:
+
+- Block widgets (`.cm-inline-title`, `.cm-properties`, `.cm-table-wrap`, `.cm-html-preview`,
+  `.cm-html-block`, `.cm-mermaid`) carry their spacing as padding. Where a decorative box
+  needs its own border (`.properties`), the widget renders a wrapper that owns the spacing —
+  see `FrontmatterWidget.toDOM`.
+- `.cm-table-wrap` is `display: block; width: fit-content` rather than `inline-block`: an
+  inline-block sits on the text baseline, and the anonymous line box around it added ~7px
+  the map could not see.
+- Margins *inside* a padded block are fine (a child's margin stays within the parent's box).
+
+Two guards keep it that way: `web/tests/editorSpacing.test.ts` fails CI if a vertical margin
+reappears on an editor block, and (dev builds only) `livePreviewGeometryGuard` logs a console
+warning when the height map is shorter than the rendered content. Attachments that load after
+layout are handled by `mediaLoadRemeasure`, which re-measures on `load`/`error`.
+
 ---
 
 ## 🔒 Security notes
