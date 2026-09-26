@@ -627,8 +627,11 @@ Cập nhật lần cuối: 2026-09-26 (FR-17 — Tạo note từ template: hết
       template, `meeting` → `Wiki/meetings`, tên dự đoán khớp file thật, note mở thành tab active, tên
       trùng → `-2` (file đầu không đổi), thư mục sai → "Folder not found" và không tạo thư mục; **0
       request lỗi, 0 pageerror/console error**; `deploy/smoke.sh` **7/7 PASS** trên server local.
-- [~] M38.5 PR + merge (merge commit) → chứng minh deploy: `/healthz` `build` == commit merge, bundle đã
-      deploy chứa chuỗi marker mới.
+- [x] M38.5 PR #44 → merge commit **6d86574**, deploy đã chứng minh: `https://webobsidian.digitalciapp.com/healthz`
+      trả `{"ok":true,"version":"0.1.1","build":"6d86574"}`; bundle trong image đã deploy chứa chuỗi
+      marker (`docker exec webobsidian grep -rl "New note from template" /app` → `index-BnoYvYat.js`, 3 lần —
+      đúng bundle đã kiểm chứng headless ở M38.4); `/`, `/tasks` và deep link `/note/Wiki/reviews/...` đều 200;
+      vault sau deploy: 9 template + 2 meeting nguyên vẹn, lint CLEAN.
 
 ### Nhật ký tiến độ
 - 2026-09-26 (FR-17 — Tạo note từ template, issue #42): người dùng hỏi "khi họp tôi phải copy 1 file từ
