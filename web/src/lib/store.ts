@@ -700,7 +700,6 @@ export const useStore = create<AppState>()(
         const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
           d.getDate(),
         ).padStart(2, '0')}`;
-        const path = `Daily/${iso}.md`;
         try {
           const { path: existing } = await api.resolve(iso);
           if (existing) {
@@ -710,6 +709,23 @@ export const useStore = create<AppState>()(
         } catch {
           /* none */
         }
+        // Create the note inside a `daily/` folder when the vault has one, and only fall back to
+        // the conventional root `Daily/` otherwise. Vaults whose daily notes are filed by an agent
+        // (a wiki scope with `relats/daily/`, for instance) are read from that path only, so a note
+        // created at the root fallback would sit there unseen and never be filed.
+        const dailyDir = (() => {
+          const stack: TreeNode[] = [...(get().tree?.children ?? [])];
+          let best = '';
+          while (stack.length) {
+            const n = stack.pop()!;
+            if (n.type === 'folder' && n.path.split('/').pop()?.toLowerCase() === 'daily') {
+              if (!best || n.path.length < best.length) best = n.path;
+            }
+            if (n.children) stack.push(...n.children);
+          }
+          return best;
+        })();
+        const path = `${dailyDir || 'Daily'}/${iso}.md`;
         await get().createNote(path, `# ${iso}\n\n`);
         get().notify(`Daily note ${iso} ready`);
       },

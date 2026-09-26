@@ -137,6 +137,29 @@ behaviour (`/healthz`, the SPA bundle, `/auth/status` exposing **only** `passwor
 refused once a credential is configured, the operator password logging in) and is what the deploy job
 gates on. It never prints a secret.
 
+### Daily note — which folder the ribbon button writes to
+
+The **Daily note** button (ribbon icon, or *Open today's daily note* in the command palette) resolves
+the date in this order:
+
+1. an existing note **anywhere** in the vault whose name is the date (`api.resolve(iso)`) is opened as-is;
+2. otherwise the note is created in the **first `daily/` folder found in the tree**, choosing the
+   shallowest path when there is more than one (e.g. `relats/daily/`);
+3. only if the vault has no `daily/` folder at all does it fall back to the conventional root `Daily/`.
+
+Step 2 exists because a vault whose daily notes are filed by an agent is read from a fixed path: the
+filing run in this deployment reads `relats/daily/<date>.md` nightly, so a note created at the root
+fallback would sit there unseen and never be filed. Before 2026-09-26 the folder was hard-coded to
+`Daily/` and only the `resolve` step hid the problem on weekdays (the Sunday prep run creates
+`relats/daily/` pages for Mon–Fri, so those dates resolved; Saturdays and Sundays did not, and the
+note landed in the wrong place). If a future vault wants a different folder, give it a real setting
+rather than re-hard-coding a path here.
+
+```bash
+# which folder did the button use? the note it created is the newest file under any daily/ folder
+ssh root@192.168.1.22 'pct exec 107 -- find /root/obsidian-data -maxdepth 3 -type d -iname daily'
+```
+
 ## Backups and rollback
 
 - **Backup** (`--backup-only`, also run automatically before every deploy): `/data` volume tarball,
