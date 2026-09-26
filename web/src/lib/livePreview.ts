@@ -975,7 +975,13 @@ class TableWidget extends WidgetType {
 
     const table = document.createElement('table');
     table.className = 'cm-table';
-    wrap.appendChild(table);
+    // Wide tables scroll inside their own box instead of being squeezed to the
+    // line width (which broke cells mid-word). The scroller is a separate child
+    // so the absolutely-positioned add-column/row controls on `wrap` aren't clipped.
+    const scroll = document.createElement('div');
+    scroll.className = 'cm-table-scroll';
+    scroll.appendChild(table);
+    wrap.appendChild(scroll);
 
     // Read the current (possibly edited) model straight from the DOM so that
     // uncommitted cell edits are never lost when a structural op fires.
@@ -2845,7 +2851,15 @@ export const livePreviewTheme = EditorView.baseTheme({
   // Markdown tables — mirror Obsidian's table CSS variables
   // (https://docs.obsidian.md/Reference/CSS+variables/Editor/Table): 1px border,
   // left-aligned + top-valigned cells, semibold header with a subtle background.
-  '.cm-table': { borderCollapse: 'collapse', margin: '0', width: 'auto' },
+  // `.cm-lineWrapping` sets `overflow-wrap: anywhere`, which lets the table's
+  // auto layout shrink columns below word width ("Own|er", "hun|g"). Restore
+  // normal wrapping so columns are at least one word wide; overflow scrolls.
+  '.cm-table': { borderCollapse: 'collapse', margin: '0', width: 'auto', overflowWrap: 'normal', wordBreak: 'normal' },
+  '.cm-table-scroll': { overflowX: 'auto', maxWidth: '100%' },
+  // .cm-content is a flex item of .cm-scroller, so by default it can't shrink
+  // below its min-content width — a wide table would widen the whole column
+  // (clipping every paragraph on a phone) instead of scrolling in its own box.
+  '.cm-content.cm-lineWrapping': { minWidth: '0' },
   '.cm-table th, .cm-table td': {
     border: '1px solid var(--bg-modifier-border)',
     padding: '4px 10px',

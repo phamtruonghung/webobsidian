@@ -102,6 +102,9 @@ interface AppState {
   /** Active theme wrapper class (e.g. 'theme-dark', 'theme-ctp-mocha'). */
   theme: string;
   setTheme: (t: string) => void;
+  /** Settings → Appearance → "Show inline title" (ui.showInlineTitle). */
+  showInlineTitle: boolean;
+  setShowInlineTitle: (v: boolean) => void;
 
   tree: TreeNode | null;
   loadTree: () => Promise<void>;
@@ -249,6 +252,16 @@ interface AppState {
   applyRemoteState: (state: any, originId: string) => Promise<void>;
 }
 
+const THEME_CACHE_KEY = 'wo-theme';
+function readCachedTheme(): string | null {
+  try {
+    const t = typeof localStorage !== 'undefined' ? localStorage.getItem(THEME_CACHE_KEY) : null;
+    return t && /^theme-[a-z-]+$/.test(t) ? t : null;
+  } catch {
+    return null;
+  }
+}
+
 const TEXT_RE = /\.(md|markdown|txt|json|csv|canvas|css|js|ya?ml)$/i;
 
 // ---- server-side workspace persistence (shared across browsers/devices) ----
@@ -342,8 +355,19 @@ export const useStore = create<AppState>()(
       setAuthed: (v) => set({ authed: v }),
       mustChangePassword: false,
       setMustChangePassword: (v) => set({ mustChangePassword: v }),
-      theme: 'theme-light',
-      setTheme: (t) => set({ theme: t }),
+      // Start from the last theme this browser used, so the login screen (shown
+      // before settings can be fetched) matches the app instead of flashing light.
+      theme: readCachedTheme() ?? 'theme-light',
+      setTheme: (t) => {
+        try {
+          localStorage.setItem(THEME_CACHE_KEY, t);
+        } catch {
+          /* storage unavailable — theme just isn't remembered for the login screen */
+        }
+        set({ theme: t });
+      },
+      showInlineTitle: true,
+      setShowInlineTitle: (v) => set({ showInlineTitle: v }),
 
       tree: null,
       loadTree: async () => {

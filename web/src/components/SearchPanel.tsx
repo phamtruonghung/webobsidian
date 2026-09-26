@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type SearchHit, type MatchContext, type NoteMatches } from '../lib/api';
 import { useStore } from '../lib/store';
 import Icon from './Icon';
+import { cleanSnippet } from '../lib/snippet';
 
 type SortMode = 'relevance' | 'name-asc' | 'name-desc' | 'path-asc';
 
@@ -13,8 +14,9 @@ const SORT_LABELS: Record<SortMode, string> = {
 };
 
 /** Render a match context with its highlighted ranges as React nodes. */
-function highlight(c: MatchContext): ReactNode[] {
+function highlight(raw: MatchContext): ReactNode[] {
   const out: ReactNode[] = [];
+  const c = { ...raw, ...cleanSnippet(raw.text, raw.ranges) };
   const ranges = [...c.ranges].sort((a, b) => a[0] - b[0]);
   let pos = 0;
   if (c.pre) out.push('…');
@@ -284,7 +286,7 @@ export default function SearchPanel() {
                         className={`rg-match ${moreContext ? 'expanded' : ''}`}
                         onClick={() => openFile(h.path)}
                       >
-                        {h.snippet}
+                        {cleanSnippet(h.snippet, []).text}
                       </div>
                     )
                   )}

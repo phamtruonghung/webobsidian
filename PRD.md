@@ -1,7 +1,22 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.16 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Phiên bản: 1.17 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Changelog 1.17 (review bản deploy — FR-2/FR-3/FR-11/FR-15/NFR, theo yêu cầu người dùng): sửa các lỗi
+> tìm thấy khi dùng thử bản production. **Bảng** không còn bẻ chữ giữa từ ("Own|er", "hun|g") — bảng rộng
+> cuộn ngang trong khung riêng thay vì bị ép theo độ rộng dòng (desktop + mobile). **Rate limit login**
+> thêm `CLIENT_IP_HEADER` (vd `CF-Connecting-IP`): sau tunnel mọi khách cùng một địa chỉ socket nên 10 lần
+> sai của người lạ khoá luôn chủ vault; header chỉ được tin khi peer là proxy tin cậy theo `TRUST_PROXY`.
+> **WebSocket** tự kết nối lại (backoff 1s→30s, reload tree sau khi nối lại), server ping mỗi 30s (Cloudflare
+> cắt WS rảnh ~100s) và `GET /ws` không upgrade trả **426** thay vì `index.html`. **Tasks board**: cột co giãn
+> (240–340px) nên 4 cột vừa màn laptop; nhãn "N hidden". **Graph**: tự fit toàn bộ graph khi layout lắng
+> (chỉ zoom ra, bỏ qua nếu người dùng đã pan/zoom), nhãn chồng nhau bị ẩn (ưu tiên node nhiều liên kết),
+> footer "N nodes · M notes". **Inline title**: thêm setting `ui.showInlineTitle` (Appearance → Show inline
+> title, mặc định bật như Obsidian). **Recent/Bookmarks** hiện thư mục cha khi trùng tên. **Snippet tìm
+> kiếm** bỏ cú pháp Markdown (`[[…]]`, `**`, `#`, `|---|`), giữ highlight; không còn lộ nửa dòng thứ 3.
+> **Trang login** dùng theme lần trước của trình duyệt (không loé nền sáng). **Mobile**: bỏ
+> `maximum-scale=1` (cho phép pinch-zoom), ô nhập 16px để iOS không tự zoom. **Cache**: `/assets/*` (tên có
+> hash) `max-age=1y, immutable`.
 > Changelog 1.16 (FR-17 — sửa lỗi chọn template, issue #46): **chọn template nay là hành động rõ ràng** —
 > hover chỉ là hiệu ứng, **click mới chọn** (trước đây `onMouseEnter` đặt cùng state với click nên hover
 > đã chọn template và cú click trở nên vô nghĩa; template đầu danh sách còn bị chọn sẵn dù người dùng
@@ -382,7 +397,9 @@ webobsidian/
 - **Self-deploy không sửa file tracked**: mọi tham số deploy đặt qua `.env` (git-ignored) —
   `VAULT_HOST_PATH` (host vault → `/vault`), `HTTP_BIND`/`HTTP_PORT` (publish), `WEBOBSIDIAN_PASSWORD`,
   `WEBOBSIDIAN_WATCH`, `TRUST_PROXY` (mặc định `true` — tin hop kề để `X-Forwarded-Proto` hoạt động khi
-  đứng sau reverse proxy; đặt `false` khi phơi trực tiếp không proxy, hoặc danh sách subnet/số hop để siết).
+  đứng sau reverse proxy; đặt `false` khi phơi trực tiếp không proxy, hoặc danh sách subnet/số hop để siết),
+  `CLIENT_IP_HEADER` (tuỳ chọn, vd `CF-Connecting-IP` — header IP thật của khách, chỉ dùng làm khoá rate
+  limit login và chỉ khi peer là proxy tin cậy theo `TRUST_PROXY`).
   `docker-compose.yml` chỉ tham chiếu `${VAR:-default}` nên `git pull`/redeploy
   không clobber cấu hình của người tự host. `cp .env.example .env && docker compose up -d --build`.
 - **File watcher chịu lỗi inotify**: VPS sạch thường có `fs.inotify.max_user_watches` thấp →
@@ -750,7 +767,9 @@ bao giờ đăng ký được lệnh của nó), nên tính năng được viế
   CORS hạn chế, rate limiting (cả `/auth/login`:
   10 lần/15 phút — **khóa theo địa chỉ socket TCP thật, không theo `req.ip`/`X-Forwarded-For`** nên
   không thể bypass bằng cách xoay vòng XFF, **bất kể cấu hình `trust proxy`**; vì vậy `trust proxy` để
-  mặc định bật (`true`, qua `TRUST_PROXY`) cho `X-Forwarded-Proto`/Secure-cookie hoạt động sau proxy). The default password (`123456`) is **only accepted when no other credential has
+  mặc định bật (`true`, qua `TRUST_PROXY`) cho `X-Forwarded-Proto`/Secure-cookie hoạt động sau proxy;
+  sau tunnel/proxy đặt `CLIENT_IP_HEADER` để khoá theo IP khách thật — header chỉ được dùng khi peer socket
+  là proxy tin cậy, nếu không vẫn khoá theo socket). The default password (`123456`) is **only accepted when no other credential has
   been configured** (`auth.userPasswordHash`, `auth.passwordHash`, or the `WEBOBSIDIAN_PASSWORD` env
   var); only then is changing it mandatory right after the first login (`mustChangePassword`). That flag
   is **not** returned by `GET /auth/status` (an unauthenticated route), so it cannot be used to discover
@@ -758,7 +777,8 @@ bao giờ đăng ký được lệnh của nó), nên tính năng được viế
   để giữ self-host HTTP). Token git/PAT được redact khỏi mọi thông báo lỗi trả client + log. WebSocket
   `/ws` yêu cầu phiên đăng nhập hợp lệ. Plugin `id` được validate trước khi thành path segment; đổi
   `vault.path` qua API bị giới hạn trong `allowedRoots`.
-- **Hiệu năng**: search < 100ms cho vault ~10k notes; lazy load file tree lớn.
+- **Hiệu năng**: search < 100ms cho vault ~10k notes; lazy load file tree lớn. Asset build có hash
+  (`/assets/*`) cache `max-age=1y, immutable`; `index.html` luôn revalidate.
 - **Tin cậy**: atomic writes cho settings & notes; backup trước ghi đè; git ops không mất dữ liệu.
 - **Khả chuyển**: chạy được trên Linux/macOS, ARM & x86.
 - **Khả dụng**: responsive (desktop/tablet/mobile), dark/light theme.
@@ -841,7 +861,7 @@ GET    /api/v1/tasks?folder=&status=&priority=&owner=&q=   # board tasks, scope 
                           "hash": "...", "scopes": ["read","search"],
                           "createdAt": "...", "lastUsed": "..." } ],
               "rateLimitPerMin": 120 },
-  "ui":     { "theme": "obsidian-dark", "defaultView": "live" },
+  "ui":     { "theme": "obsidian-dark", "defaultView": "live", "showInlineTitle": true },
   "plugins":{ "enabled": ["dataview"], "installed": [] }
 }
 ```

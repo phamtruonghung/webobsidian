@@ -15,6 +15,14 @@ export default function BookmarksPanel() {
   const notify = useStore((s) => s.notify);
 
   const name = (p: string) => p.split('/').pop()?.replace(/\.(md|markdown)$/, '') ?? p;
+  // Two entries can share a file name (e.g. `a/board.md` and `b/board.md`);
+  // show the parent folder next to those so they can be told apart.
+  const folderHint = (p: string, list: string[]) => {
+    const n = name(p);
+    if (!list.some((o) => o !== p && name(o) === n)) return null;
+    const dir = p.split('/').slice(0, -1).join('/');
+    return <span className="panel-item-hint">{dir || '/'}</span>;
+  };
 
   const copyUrl = (p: string) => {
     navigator.clipboard?.writeText(`${location.origin}${pathToUrl(p)}`).catch(() => {});
@@ -66,7 +74,7 @@ export default function BookmarksPanel() {
           onContextMenu={(e) => showMenu(e, b, 'bookmark')}
           title={b}
         >
-          <Icon name="bookmark" size={14} /> <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(b)}</span>
+          <Icon name="bookmark" size={14} /> <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(b)}{folderHint(b, bookmarks)}</span>
           <span className="panel-item-actions">
             <span title="Move file to…" onClick={(e) => actionBtn(e, () => setMovePath(b))}>
               <Icon name="folder" size={13} />
@@ -89,7 +97,7 @@ export default function BookmarksPanel() {
           onContextMenu={(e) => showMenu(e, r, 'recent')}
           title={r}
         >
-          <Icon name="clock" size={14} /> <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(r)}</span>
+          <Icon name="clock" size={14} /> <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(r)}{folderHint(r, recent)}</span>
           <span className="panel-item-actions">
             <span title="Move file to…" onClick={(e) => actionBtn(e, () => setMovePath(r))}>
               <Icon name="folder" size={13} />

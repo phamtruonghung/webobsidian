@@ -93,6 +93,7 @@ export default function Preview({ source }: { source?: string }) {
   const storeContent = useStore((s) => s.content);
   const content = source ?? storeContent;
   const activePath = useStore((s) => s.activePath);
+  const showInlineTitle = useStore((s) => s.showInlineTitle);
   const openWikilink = useStore((s) => s.openWikilink);
   const openContextMenu = useStore((s) => s.openContextMenu);
   const setLeftPanel = useStore((s) => s.setLeftPanel);
@@ -239,7 +240,7 @@ export default function Preview({ source }: { source?: string }) {
     .split(/\r?\n/)
     .find((l) => l.trim() !== '');
   const h1 = firstLine?.match(/^#\s+(.+?)\s*$/);
-  const showTitle = !!title && !(h1 && h1[1].trim().toLowerCase() === title.trim().toLowerCase());
+  const showTitle = showInlineTitle && !!title && !(h1 && h1[1].trim().toLowerCase() === title.trim().toLowerCase());
 
   return (
     <div className="markdown-preview" onClick={onClick} onContextMenu={onContextMenu}>

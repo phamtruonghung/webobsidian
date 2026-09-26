@@ -81,6 +81,8 @@ const SettingsSchema = z.object({
         ])
         .default('obsidian-light'),
       defaultView: z.enum(['live', 'source', 'reading']).default('live'),
+      // Obsidian's "Show inline title": the filename rendered above the note body.
+      showInlineTitle: z.boolean().default(true),
     })
     .default({}),
   plugins: z

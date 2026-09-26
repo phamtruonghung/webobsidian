@@ -166,7 +166,10 @@ gates on. It never prints a secret.
    The runner runs as root, which is what lets the job drive Docker.
 3. `/root/webobsidian/.env` — `VAULT_HOST_PATH=/root/obsidian-data`, `HTTP_BIND=0.0.0.0`,
    `HTTP_PORT=8787`, `TRUST_PROXY=true`, `WEBOBSIDIAN_PASSWORD=<operator override>`,
-   `WEBOBSIDIAN_WATCH=auto`.
+   `WEBOBSIDIAN_WATCH=auto`, `CLIENT_IP_HEADER=CF-Connecting-IP` (per-visitor login throttle
+   behind the tunnel — without it every visitor shares cloudflared's address and 10 wrong
+   guesses from anyone lock the owner out for 15 min; ideally also narrow `TRUST_PROXY` to the
+   Proxmox host's IP since `HTTP_BIND=0.0.0.0` makes the port reachable on the LAN).
 
 ### Migration off the upstream checkout (2026-09-20)
 

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promises as fs, readFileSync } from 'node:fs';
 import http from 'node:http';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, type WebSocket } from 'ws';
 import chokidar from 'chokidar';
 
 import { config } from './config.js';
@@ -143,9 +143,25 @@ async function main() {
   app.use('/share', sharePageRouter); // SSR public share page (NO auth, SEO/OG meta)
   app.use('/api', searchRouter); // /api/search, /api/tags, /api/backlinks, /api/graph...
 
+  // A plain (non-upgrade) GET /ws means a proxy in front stripped the WebSocket
+  // Upgrade header. Say so, instead of the SPA fallback answering 200 with
+  // index.html — which the browser reports as an opaque handshake failure.
+  app.get('/ws', (_req, res) => {
+    res.status(426).setHeader('Upgrade', 'websocket').json({
+      error: 'WebSocket upgrade required — if you are behind a proxy/tunnel, enable WebSocket support there.',
+    });
+  });
+
   // Static SPA (built into server/public)
   const publicDir = path.join(__dirname, '..', 'public');
   if (await dirExists(publicDir)) {
+    // Vite's /assets/* file names carry a content hash, so they never change in
+    // place: let browsers keep them for a year. Everything else (index.html,
+    // manifest, icons) keeps the default revalidation so a deploy shows up at once.
+    app.use(
+      '/assets',
+      express.static(path.join(publicDir, 'assets'), { immutable: true, maxAge: '1y', fallthrough: false }),
+    );
     app.use(express.static(publicDir));
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/public')) return next();
@@ -236,9 +252,27 @@ function setupWebsocket(server: http.Server) {
     })();
   });
 
+  // Heartbeat: ping every 30s so idle connections aren't closed by proxies
+  // (Cloudflare drops a WebSocket after ~100s without traffic), and terminate
+  // clients that didn't answer the previous ping so dead sockets don't pile up.
+  const alive = new WeakMap<WebSocket, boolean>();
   wss.on('connection', (ws) => {
+    alive.set(ws, true);
+    ws.on('pong', () => alive.set(ws, true));
     ws.send(JSON.stringify({ type: 'hello' }));
   });
+  const heartbeat = setInterval(() => {
+    for (const client of wss.clients) {
+      if (!alive.get(client)) {
+        client.terminate();
+        continue;
+      }
+      alive.set(client, false);
+      client.ping();
+    }
+  }, 30_000);
+  heartbeat.unref();
+  wss.on('close', () => clearInterval(heartbeat));
   setBroadcaster((msg) => {
     const data = JSON.stringify(msg);
     for (const client of wss.clients) {
