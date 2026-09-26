@@ -128,6 +128,11 @@ scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head and merge 
 
 ## ✨ Features
 
+- 🔒 **Vault locks** — mark paths read-only for the browser (`_system/locks.json`): raw evidence,
+  generated boards and indexes refuse session writes with `423 locked` while the agent keeps
+  writing. Locked notes show a 🔒 in the tree and a banner in the editor explaining why.
+  See [`docs/LOCKS.md`](docs/LOCKS.md).
+
 - 📝 **Editor & rendering** — CodeMirror 6 with live / source / reading views; wikilinks
   `[[note]]`, embeds `![[file]]`, tags `#tag`, callouts, task lists, KaTeX math and
   Mermaid diagrams.

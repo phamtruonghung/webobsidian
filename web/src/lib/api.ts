@@ -9,6 +9,9 @@ export interface TreeNode {
   mtime?: number;
   ctime?: number;
   children?: TreeNode[];
+  /** Set by the server from `_system/locks.json`: the browser must not edit this path. */
+  locked?: boolean;
+  lockReason?: string;
 }
 
 export interface TrashItem {
@@ -80,6 +83,21 @@ export interface TaskRecord {
   tags: string[];
 }
 
+/**
+ * Unlocking a locked note is deliberate and per-session: the editor sets this only after the
+ * human confirms (or types the operator password, when `_system/locks.json` asks for one), and
+ * every write then carries the headers below. The server re-checks them on each request.
+ */
+let unlock: { active: boolean; password?: string } = { active: false };
+
+export function setUnlock(v: { active: boolean; password?: string }): void {
+  unlock = v;
+}
+
+export function isUnlocked(): boolean {
+  return unlock.active;
+}
+
 async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
   const { headers: optHeaders, ...rest } = opts;
   const res = await fetch(url, {
@@ -87,26 +105,35 @@ async function req<T>(url: string, opts: RequestInit = {}): Promise<T> {
     ...rest,
     // headers MUST be merged last — spreading ...opts after a `headers` literal
     // would drop Content-Type whenever a caller passes its own headers.
-    headers: { 'Content-Type': 'application/json', ...(optHeaders ?? {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(unlock.active
+        ? { 'x-unlock-locked': '1', ...(unlock.password ? { 'x-unlock-password': unlock.password } : {}) }
+        : {}),
+      ...(optHeaders ?? {}),
+    },
   });
   if (res.status === 401) {
     throw new ApiError('Unauthorized', 401);
   }
   if (!res.ok) {
     let msg = res.statusText;
+    let data: unknown;
     try {
-      msg = (await res.json()).error ?? msg;
+      const body = await res.json();
+      msg = body.error ?? msg;
+      data = body;
     } catch {
       /* ignore */
     }
-    throw new ApiError(msg, res.status);
+    throw new ApiError(msg, res.status, data);
   }
   const ct = res.headers.get('content-type') ?? '';
   return (ct.includes('application/json') ? res.json() : (res.text() as unknown)) as Promise<T>;
 }
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(message: string, public status: number, public data?: unknown) {
     super(message);
   }
 }
@@ -135,9 +162,15 @@ export const api = {
   // files
   tree: () => req<TreeNode>('/api/files/'),
   read: (path: string) =>
-    req<{ path: string; content: string; encoding?: string; version?: string }>(
-      `/api/files/content?path=${encodeURIComponent(path)}`,
-    ),
+    req<{
+      path: string;
+      content: string;
+      encoding?: string;
+      version?: string;
+      locked?: boolean;
+      lockReason?: string;
+      unlock?: 'off' | 'confirm' | 'password';
+    }>(`/api/files/content?path=${encodeURIComponent(path)}`),
   // baseVersion (CAS): when given, the server rejects a stale write with 409 version_conflict.
   write: (path: string, content: string, baseVersion?: string) =>
     req<{ ok: true; path: string; version?: string }>('/api/files/content', {

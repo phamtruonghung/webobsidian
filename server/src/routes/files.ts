@@ -13,9 +13,32 @@ import { onFileRenamed } from '../services/shares.js';
 import { mimeFor } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
 import { contentVersion, checkVersion } from '../services/noteversion.js';
+import { annotateTree, loadLocks, lockFor, sessionMayWrite, targetsOf } from '../services/locks.js';
 
 export const filesRouter = Router();
 filesRouter.use(requireAuth);
+
+// Locked paths (the areas the agent maintains: raw evidence, generated pages, `_system/`) are
+// readable but not writable from a browser session. The agent is unaffected — it writes through
+// the API-key router (`/api/v1`), which never passes this middleware. The list is
+// `_system/locks.json`; see `services/locks.ts` for the glob syntax and the unlock modes.
+filesRouter.use(
+  asyncHandler(async (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+      next();
+      return;
+    }
+    for (const rel of targetsOf(req)) {
+      const verdict = await sessionMayWrite(req, rel);
+      if (!verdict.ok) {
+        const { unlock } = await loadLocks();
+        res.status(423).json({ error: 'locked', path: rel, reason: verdict.reason, unlock });
+        return;
+      }
+    }
+    next();
+  }),
+);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 512 * 1024 * 1024 } });
 
@@ -33,7 +56,8 @@ function reindex(opts: { upsert?: string; added?: string; removed?: string } = {
 filesRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
-    res.json(await vault.listTree());
+    // Lock flags ride along so the tree can badge the agent-owned paths without a second request.
+    res.json(await annotateTree(await vault.listTree()));
   }),
 );
 
@@ -55,7 +79,17 @@ filesRouter.get(
       const content = await vault.readFileText(rel);
       // Additive: existing clients that ignore `version` are unaffected. Used as
       // the compare-and-set base for PUT (e.g. the Tasks board's write-back).
-      res.json({ path: rel, content, encoding: 'utf8', version: contentVersion(content) });
+      const rule = await lockFor(rel);
+      const { unlock } = await loadLocks();
+      res.json({
+        path: rel,
+        content,
+        encoding: 'utf8',
+        version: contentVersion(content),
+        locked: !!rule,
+        lockReason: rule?.reason,
+        unlock,
+      });
     } else {
       // Stream with Range support so embedded <video>/<audio> can seek.
       const abs = await vault.resolveInVault(rel);
@@ -112,6 +146,14 @@ filesRouter.post(
     const file = req.file;
     if (!file) {
       res.status(400).json({ error: 'file required' });
+      return;
+    }
+    // `dir` arrives in the multipart body, which only exists after multer has run — so unlike
+    // every other write route this one is checked here rather than in the router middleware.
+    const verdict = await sessionMayWrite(req, path.posix.join(dir, file.originalname));
+    if (!verdict.ok) {
+      const { unlock } = await loadLocks();
+      res.status(423).json({ error: 'locked', path: dir, reason: verdict.reason, unlock });
       return;
     }
     // Reuse an existing folder that differs only in case (e.g. an Obsidian vault's
