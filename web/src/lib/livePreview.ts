@@ -11,6 +11,7 @@ import { syntaxTree } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { openLightbox } from './imageLightbox';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
+import { themedPopupHost } from './theme';
 
 /**
  * Live Preview for CodeMirror 6 — an Obsidian-style WYSIWYG editing mode.
@@ -1624,8 +1625,7 @@ class FrontmatterWidget extends WidgetType {
       container.insertBefore(inp, addBtn);
       // Mount inside the theme wrapper (not <body>) so the CSS variables that give
       // the dropdown its background resolve — otherwise it renders transparent.
-      const host = (document.querySelector('.theme-light, .theme-dark') as HTMLElement) ?? document.body;
-      host.appendChild(dd);
+      themedPopupHost().appendChild(dd);
       // Fixed-position just below the input (viewport coords; rect forces reflow).
       const ir = inp.getBoundingClientRect();
       dd.style.left = `${Math.round(ir.left)}px`;

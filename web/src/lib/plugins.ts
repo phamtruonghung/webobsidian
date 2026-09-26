@@ -9,6 +9,7 @@
  */
 import { api } from './api';
 import { useStore } from './store';
+import { themedPopupHost } from './theme';
 
 // ---- Minimal Obsidian API shim ------------------------------------------
 class Events {
@@ -23,7 +24,9 @@ class Notice {
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = message;
-    document.body.appendChild(el);
+    // Inside the themed root, not `<body>`: `.toast` reads palette variables, so on
+    // `<body>` it would render unthemed (transparent, black text on the dark themes).
+    themedPopupHost().appendChild(el);
     setTimeout(() => el.remove(), 4000);
   }
 }

@@ -1,7 +1,15 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.17 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Phiên bản: 1.18 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Changelog 1.18 (FR-18 — sửa lỗi popup gợi ý trên theme Catppuccin, issue #49): gõ `[[` để chèn liên
+> kết trên theme Catppuccin thì danh sách gợi ý hiện **chữ đen** (theme đang dùng là `catppuccin-mocha`,
+> một theme tối) — popup bị mount ra ngoài wrapper theme vì nơi mount chỉ tìm `.theme-light, .theme-dark`,
+> thiếu bốn class `theme-ctp-*`. Biến palette (`--text-normal`, `--background-primary`…) chỉ khai báo trên
+> wrapper `.theme-*`, nên ngoài đó mọi `var()` vô hiệu: chữ về màu đen mặc định, nền trong suốt. Sửa bằng
+> một helper duy nhất `themedPopupHost()` (`web/src/lib/theme.ts`) — dùng chung `THEME_SELECTOR` với
+> `THEME_CLASS` nên theme mới thêm sẽ tự đúng; áp cho suggester `[[`/`#`, dropdown giá trị trong Properties
+> và toast của plugin. Thêm guard test `web/tests/themeHost.test.ts` để shortcut hai class không quay lại.
 > Changelog 1.17 (review bản deploy — FR-2/FR-3/FR-11/FR-15/NFR, theo yêu cầu người dùng): sửa các lỗi
 > tìm thấy khi dùng thử bản production. **Bảng** không còn bẻ chữ giữa từ ("Own|er", "hun|g") — bảng rộng
 > cuộn ngang trong khung riêng thay vì bị ép theo độ rộng dòng (desktop + mobile). **Rate limit login**
@@ -760,6 +768,38 @@ bao giờ đăng ký được lệnh của nó), nên tính năng được viế
 - **Phía vault (không phải code repo)**: `Wiki/templates/meeting.md` đang viết `title: Meeting — subject
   YYYY-MM-DD`, nên note tạo ra vẫn còn chữ "subject"; đổi `title:`/H1 của template sang `{{title}}` thì
   tiêu đề gõ vào đi thẳng vào note. Lệnh chạy đúng trong cả hai trường hợp.
+
+### FR-18 · Popup nổi phải mount bên trong wrapper theme (issue #49)
+Mục tiêu: mọi popup mở đè lên editor (gợi ý `[[`, gợi ý `#`, dropdown giá trị property, toast) phải
+theo theme đang dùng — gồm cả bốn theme Catppuccin, không chỉ Obsidian Light/Dark.
+
+- **Lỗi gốc (đo được, không phải phỏng đoán)**: `web/src/lib/theme.ts` khai báo palette bằng CSS biến
+  (`--text-normal`, `--background-primary`, `--text-accent`…) trên **wrapper `.theme-*`** (`theme-light`,
+  `theme-dark`, `theme-ctp-mocha/-macchiato/-frappe/-latte`). Popup của suggester `[[` và dropdown giá
+  trị trong Properties lại tìm wrapper bằng `document.querySelector('.theme-light, .theme-dark')` — thiếu
+  bốn class `theme-ctp-*`. Trên theme Catppuccin lookup trả `null` → popup bị `appendChild` vào `<body>`,
+  tức **ngoài** phạm vi khai báo biến: `.suggestion-title { color: var(--text-normal) }` không giải được,
+  rơi về màu chữ mặc định (**đen**), `.suggestion-container { background: var(--background-primary) }`
+  không giải được → **nền trong suốt**. Vault này đang dùng `catppuccin-mocha` (theme tối) nên đúng như
+  người dùng báo: chữ đen trên nền tối.
+- **Số đo trước khi sửa** (headless Chromium, `[[` + `Al`, bundle trùng bản deploy `d876c0c`):
+  `obsidian-light` → cha `div.theme-light`, chữ `rgb(34,34,34)`; `obsidian-dark` → cha `div.theme-dark`,
+  chữ `rgb(218,218,218)`; `catppuccin-mocha` → cha **`BODY`**, chữ **`rgb(0,0,0)`**, nền `rgba(0,0,0,0)`.
+  Dropdown giá trị Properties: cha `BODY`, nền trong suốt, chữ đen.
+- **Một helper duy nhất**: `themedRoot()` (chuyển từ `lib/cssColor.ts` sang `lib/theme.ts`, cssColor
+  import lại) và `themedPopupHost()` = `themedRoot() ?? document.body`. Cả hai dùng `THEME_SELECTOR`
+  dựng từ `THEME_CLASS` — nguồn sự thật duy nhất — nên **thêm theme mới không phải sửa nơi mount**.
+- **Ba điểm mount được sửa**: `lib/suggest.ts` (suggester `[[` và `#`), `lib/livePreview.ts` (dropdown
+  giá trị property), `lib/plugins.ts` (`Notice` → `.toast`; `.toast` cũng đọc biến palette nên cùng lỗi).
+  Lightbox giữ nguyên (style dùng màu literal, không đọc biến palette).
+- **Guard test**: `web/tests/themeHost.test.ts` — bắt lỗi nếu (a) có `querySelector('.theme-light, .theme-dark')`
+  ở bất kỳ file `web/src/**` nào, (b) ba điểm mount không dùng `themedPopupHost()` hoặc append thẳng vào
+  `document.body`, (c) `THEME_SELECTOR` thiếu class nào trong `THEME_CLASS`, (d) nhánh fallback: có wrapper
+  thì mount vào wrapper, chưa render thì về `<body>`. Đã kiểm chứng test **đỏ** khi hoàn tác code cũ (revert
+  `suggest.ts` → 2 test fail) và **xanh** sau khi sửa; không cần DOM thật (đọc source + stub `Document`).
+- **Không làm (non-goals)**: đổi cách khai báo palette (giữ trên wrapper, không đẩy lên `:root`); sửa phép
+  thử `document.querySelector('.theme-dark')` dùng làm cờ "đang tối" cho mermaid (`lib/livePreview.ts`,
+  `components/Preview.tsx`) — đó là lỗi khác (mermaid render sai theme trên Catppuccin), tách issue riêng.
 
 ## 4. Yêu cầu phi chức năng (NFR)
 - **Bảo mật**: password hash scrypt, JWT secret tự sinh, API key hash khi lưu, path traversal guard

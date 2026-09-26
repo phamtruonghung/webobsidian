@@ -23,6 +23,12 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   create-only server-side) and it does not create a missing folder — it names it instead. *(issue #42)*
 
 ### Fixed
+- **The `[[` link suggester no longer renders black-on-dark.** The popup was mounted outside the
+  themed wrapper whenever the active theme is one of the four **Catppuccin** themes (the lookup only
+  matched `.theme-light, .theme-dark`), where the palette variables don't resolve: titles came out
+  black and the popup background transparent. It now mounts through `themedPopupHost()`, so every
+  theme gets its own colours. Same fix for the Properties **value dropdown** and plugin **notices**.
+  *(issue #49)*
 - **Tables no longer break words in half** ("Own|er", "hun|g"). Wide tables scroll sideways in their
   own box instead of being squeezed to the line width, on desktop and phone.
 - **Live updates survive disconnects.** The browser reconnects the WebSocket with backoff (and reloads

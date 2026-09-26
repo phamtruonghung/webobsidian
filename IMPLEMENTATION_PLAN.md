@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-26 (Phase 17 — sửa các lỗi tìm thấy khi review bản production)
+Cập nhật lần cuối: 2026-09-26 (Phase 40 — popup nổi mount ngoài wrapper theme: chữ đen trên theme tối Catppuccin, issue #49)
 
 ---
 
@@ -662,7 +662,44 @@ Cập nhật lần cuối: 2026-09-26 (Phase 17 — sửa các lỗi tìm thấy
       `Wiki/meetings/<date>-<slug>.md` và mở note, trùng tên → `-2`, thư mục sai → `Folder not found`,
       **0 request lỗi, 0 pageerror**.
 
+## Phase 40 — Popup nổi mount ngoài wrapper theme (chữ đen trên theme tối Catppuccin) — FR-18 (issue #49)
+- [x] M40.1 Dựng lại lỗi bằng headless Chromium trên bản copy vault: `[[` + `Al` với 6 theme. Xác nhận
+      `obsidian-light`/`obsidian-dark` đúng, còn **mọi theme Catppuccin** mount popup vào `BODY` → chữ
+      `rgb(0,0,0)` trên nền trong suốt. Đối chiếu theme thật của vault production (`settings.json` trên
+      LXC 107: `catppuccin-mocha`) → đúng ca người dùng báo.
+- [x] M40.2 Thêm `themedRoot()` + `themedPopupHost()` vào `web/src/lib/theme.ts` (dùng `THEME_SELECTOR`
+      dựng từ `THEME_CLASS`); `lib/cssColor.ts` import lại thay vì tự định nghĩa.
+- [x] M40.3 Sửa 3 điểm mount: `lib/suggest.ts` (suggester `[[`/`#`), `lib/livePreview.ts` (dropdown giá trị
+      property), `lib/plugins.ts` (`Notice`/`.toast`). Không còn `querySelector('.theme-light, .theme-dark')`
+      trong `web/src`.
+- [x] M40.4 Guard test `web/tests/themeHost.test.ts` (4 test): selector phủ đủ `THEME_CLASS`, cấm shortcut
+      hai class, ba điểm mount phải dùng `themedPopupHost()` (không append vào `document.body`), nhánh
+      fallback về `<body>`. Kiểm chứng **đỏ** khi revert `suggest.ts` (2 test fail), **xanh** sau khi sửa.
+- [x] M40.5 Kiểm chứng: `npm run typecheck` sạch; `npm test` **149 server + 137 web** PASS; headless 6 theme
+      — popup nằm trong wrapper, `background` và màu chữ **khớp biến palette** (`catppuccin-mocha`: nền
+      `rgb(30,30,46)`, chữ `rgb(205,214,244)`), dropdown Properties từ `BODY`/trong suốt/đen →
+      `div.theme-ctp-mocha`/`rgb(30,30,46)`/`rgb(205,214,244)`, 0 pageerror; ảnh chụp đọc lại bằng vision
+      xác nhận chữ sáng trên nền tối; `deploy/smoke.sh` local 7/7 PASS.
+- [x] M40.6 Docs cùng lượt: PRD 1.18 (FR-18), CHANGELOG `[Unreleased] › Fixed`, README thêm mục
+      "Floating popups must mount inside the themed root".
+
 ### Nhật ký tiến độ
+- 2026-09-26 (Phase 40 — popup gợi ý `[[` chữ đen trên theme tối, issue #49): người dùng báo gõ `[[` thì
+  chữ trong danh sách gợi ý hiện màu đen khi ở dark mode. Dựng lại bằng headless: theme thật của vault
+  production là `catppuccin-mocha`, và **chỉ** bốn theme Catppuccin lỗi — `obsidian-light`/`obsidian-dark`
+  vẫn đúng. Nguyên nhân: hai nơi mount popup tìm wrapper bằng `document.querySelector('.theme-light,
+  .theme-dark')`, thiếu `theme-ctp-*`, nên popup rơi vào `<body>` — ngoài phạm vi khai báo biến palette →
+  `.suggestion-title` về màu đen mặc định, nền popup trong suốt (đo được: cha `BODY`, chữ `rgb(0,0,0)`,
+  nền `rgba(0,0,0,0)`). Sửa bằng một helper `themedPopupHost()` (`lib/theme.ts`, dùng `THEME_SELECTOR` từ
+  `THEME_CLASS`; `themedRoot()` chuyển từ `lib/cssColor.ts` về đây) và áp cho cả ba chỗ mount popup —
+  suggester `[[`/`#`, dropdown giá trị Properties, toast của plugin (lightbox không đọc biến palette nên
+  giữ nguyên). Guard test `web/tests/themeHost.test.ts` (4 test) chặn shortcut hai class quay lại, đã thấy
+  **đỏ** khi revert `suggest.ts` và **xanh** sau khi sửa. Kiểm chứng: typecheck sạch, `npm test` 149 server
+  + 137 web PASS, headless 6 theme (popup trong wrapper, nền + màu chữ khớp biến palette; mocha nền
+  `rgb(30,30,46)` chữ `rgb(205,214,244)`), dropdown Properties trước/sau đo được, ảnh chụp đọc lại bằng
+  vision, `deploy/smoke.sh` 7/7. Docs: PRD 1.18 + FR-18, Phase 40, CHANGELOG, README (mục "Floating popups
+  must mount inside the themed root"). Tách riêng: mermaid dùng `querySelector('.theme-dark')` làm cờ "đang
+  tối" nên render sai theme trên Catppuccin — issue #50.
 - 2026-09-26 (Phase 17 — review bản production theo yêu cầu người dùng): dùng thử
   https://webobsidian.digitalciapp.com bằng Playwright (desktop 1440px + iPhone 13) và sửa 11 điểm:
   bảng bẻ chữ giữa từ (`.cm-lineWrapping` đặt `overflow-wrap: anywhere` + bảng bị ép theo độ rộng dòng —
