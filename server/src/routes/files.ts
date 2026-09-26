@@ -75,6 +75,12 @@ filesRouter.get(
       const resolved = resolveFile(rel);
       if (resolved) rel = resolved;
     }
+    // Still missing: a text-looking path that is not there is a 404. Without this the read fell
+    // through to readFileText and surfaced ENOENT as a 500 (found by the deploy smoke).
+    if (!(await vault.exists(rel))) {
+      res.status(404).json({ error: 'not_found', path: rel });
+      return;
+    }
     if (vault.isTextFile(rel)) {
       const content = await vault.readFileText(rel);
       // Additive: existing clients that ignore `version` are unaffected. Used as

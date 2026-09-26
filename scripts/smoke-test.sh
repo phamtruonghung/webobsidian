@@ -239,6 +239,12 @@ KEY_G="$(curl -s -b /tmp/wo-g-cookies.txt -X POST "$BASE/api/keys" -H 'Content-T
 code="$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/v1/notes/relats/raw/2026-09-26-evidence.md" \
   -H "X-API-Key: $KEY_G" -H 'Content-Type: application/json' -d '{"content":"# the agent wrote this\n"}')"
 chk "the agent's key writes the same locked note (a lock binds the browser session only)" "200" "$code"
+
+# `echo $got` collapses the whitespace the line continuations introduce.
+got="$(curl -s -o /tmp/wo-g-404.json -w '%{http_code}' -b /tmp/wo-g-cookies.txt \
+       "$BASE/api/files/content?path=relats/raw/2026-09-26-no-such-note.md") \
+       $(python3 -c 'import json;print(json.load(open("/tmp/wo-g-404.json")).get("error"))')"
+chk "reading a note that does not exist is a 404, not a 500" "404 not_found" "$(echo $got)"
 kill -TERM $SRV 2>/dev/null; wait $SRV 2>/dev/null
 
 echo
