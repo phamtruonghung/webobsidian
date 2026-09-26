@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-26 (Phase 40 — popup nổi mount ngoài wrapper theme: chữ đen trên theme tối Catppuccin, issue #49)
+Cập nhật lần cuối: 2026-09-26 (Phase 42 — hai lỗi đường dẫn: note không tồn tại trả 500, daily note về sai thư mục — FR-20, issue #52 và #55)
 
 ---
 
@@ -683,7 +683,52 @@ Cập nhật lần cuối: 2026-09-26 (Phase 40 — popup nổi mount ngoài wra
 - [x] M40.6 Docs cùng lượt: PRD 1.18 (FR-18), CHANGELOG `[Unreleased] › Fixed`, README thêm mục
       "Floating popups must mount inside the themed root".
 
+## Phase 41 — Khoá ghi chú cho trình duyệt (vault locks) — FR-19 (issue #53, #54)
+- [x] M41.1 Chốt thiết kế trong issue: khoá là middleware trên router **của phiên** (`/api/files`), không
+      phải hệ quyền thứ hai — đường `/api/v1` của agent xác thực bằng API key nên không đi qua đó và vẫn
+      ghi bình thường. Danh sách nằm trong vault (`_system/locks.json`) để đổi không phải deploy lại.
+- [x] M41.2 `server/src/services/locks.ts`: parse + cache theo `mtime` (file thiếu/hỏng ⇒ khoá rỗng),
+      `globToRegExp` (`**`, `*`, `?`, không phân biệt hoa/thường, escape ký tự regex), `lockFor`,
+      `targetsOf` (gom `path`/`from`/`to`/`dir`/`paths` từ body + query) và `sessionMayWrite` cho ba chế
+      độ `confirm`/`password`/`off`; `annotateTree` gắn cờ khoá cho cả cây bằng **một** lần đọc cấu hình.
+- [x] M41.3 `server/src/routes/files.ts`: một middleware chặn ghi trên router phiên (trả `423 locked` kèm
+      lý do), gắn `locked`/`lockReason` vào `GET /api/files` và `locked`/`lockReason`/`unlock` vào
+      `GET /api/files/content`; `POST /upload` kiểm tra trong handler vì đường dẫn chỉ có sau multer.
+- [x] M41.4 Web: `Icon` thêm glyph lock, `FileTree` hiện 🔒 kèm tooltip, `Editor` chuyển read-only bằng
+      đúng cơ chế compartment đã dùng cho chế độ reading + banner nêu lý do, `lib/api.ts` giữ trạng thái
+      mở khoá theo phiên và gửi header, `lib/store.ts` nhận cờ khoá khi mở note và bắt `423` khi lưu.
+- [x] M41.5 Test: `server/src/services/locks.test.ts` (13 test) + `scripts/smoke-test.sh` scenario G.
+- [x] M41.6 Node phủ xanh: PR #53 (kèm `docs/LOCKS.md`, README) → merge → deploy build `06860d4` live.
+- [x] M41.7 Khoá luôn trên **container thật**: `deploy/smoke.sh` đăng nhập, đọc `_system/locks.json` qua
+      cây file, ghi thử vào thư mục khoá đầu tiên tìm được rồi kiểm tra không còn dấu vết — PR #54.
+
+## Phase 42 — Hai lỗi đường dẫn: note không tồn tại trả 500, daily note về sai thư mục — FR-20 (issue #52, #55)
+- [x] M42.1 Assert của FR-19 ("lần ghi bị từ chối không để lại gì trên đĩa") bắt được lỗi: đọc lại đường
+      dẫn thử nghiệm trả **500** thay vì **404** — deploy tự rollback, không có gì lọt ra người dùng.
+- [x] M42.2 `server/src/routes/files.ts`: sau khi thử giải basename mà vẫn thiếu file ⇒ `404 not_found`.
+- [x] M42.3 `web/src/lib/store.ts`: chọn thư mục `daily/` nông nhất trong cây thay vì hardcode `Daily/` ở
+      gốc; chỉ rơi về `Daily/` gốc khi vault không có thư mục daily nào (issue #52) + `docs/DEPLOYMENT.md`.
+- [x] M42.4 Kiểm chứng: `npm test` sạch; `scripts/smoke-test.sh` **31 PASS** (thêm assert `404 not_found`);
+      deploy `b7233be` live, `deploy/smoke.sh` **10/10 PASS**; vault thật `wiki_lint` CLEAN sau khi adopt.
+
 ### Nhật ký tiến độ
+- 2026-09-26 (Phase 42 — hai lỗi đường dẫn, FR-20): assert mới của Phase 41 trên container thật bắt được
+  `GET /api/files/content` trả **500** khi note không tồn tại (route giải basename rồi vẫn đọc tiếp ⇒ ENOENT
+  thành 500); deploy đã tự rollback nên không lộ ra ngoài. Thêm nhánh `404 not_found` sau bước giải
+  basename, và thêm assert `404 not_found` vào scenario G. Lỗi thứ hai (issue #52) đã sửa cùng ngày: lệnh
+  daily note hardcode `Daily/<iso>.md` ở gốc vault nên sinh file rác ở gốc cho vault này (daily note nằm ở
+  `relats/daily/`); nay chọn thư mục `daily/` nông nhất trong cây. Kiểm chứng: `npm test` sạch,
+  `scripts/smoke-test.sh` 31 PASS, deploy `b7233be` 10/10 PASS.
+- 2026-09-26 (Phase 41 — khoá ghi chú cho trình duyệt, FR-19, issue #53/#54): yêu cầu từ người dùng —
+  "có file markdown sửa được, có file không; viết hàm khoá để em không sửa nhầm, và hiện icon/trạng thái
+  cho em biết". Nhận ra app đã tách sẵn hai đường ghi (cookie phiên vs API key) nên khoá chỉ cần chặn
+  **một** đường: `_system/locks.json` khai báo glob + lý do, phiên nhận `423 locked`, agent vẫn ghi — đúng
+  ý người dùng ("anh sửa được, em thì không"). Ba chế độ mở khoá (`confirm`/`password`/`off`), mặc định
+  `confirm` để khoá không trở thành ngõ cụt. 13 unit test + scenario G phủ cả ca quan trọng nhất: **key
+  của agent ghi được note đang bị khoá**. Live: build `06860d4` rồi `b7233be`, 58 đường dẫn bị khoá trong
+  vault thật, `deploy/smoke.sh` khẳng định lại sau mỗi lần deploy.
+
+
 - 2026-09-26 (Phase 40 — popup gợi ý `[[` chữ đen trên theme tối, issue #49): người dùng báo gõ `[[` thì
   chữ trong danh sách gợi ý hiện màu đen khi ở dark mode. Dựng lại bằng headless: theme thật của vault
   production là `catppuccin-mocha`, và **chỉ** bốn theme Catppuccin lỗi — `obsidian-light`/`obsidian-dark`
