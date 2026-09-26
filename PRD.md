@@ -1,7 +1,15 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.15 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Phiên bản: 1.16 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Changelog 1.16 (FR-17 — sửa lỗi chọn template, issue #46): **chọn template nay là hành động rõ ràng** —
+> hover chỉ là hiệu ứng, **click mới chọn** (trước đây `onMouseEnter` đặt cùng state với click nên hover
+> đã chọn template và cú click trở nên vô nghĩa; template đầu danh sách còn bị chọn sẵn dù người dùng
+> chưa chọn gì). Hàng template chuyển thành `<button>` (click, focus, Enter/Space), modal thêm dòng
+> **Template:** nêu tên template đang chọn, và form nói rõ **vì sao chưa tạo được** thay vì để nút chết.
+> **Thư mục là bắt buộc**: template không suy ra được thư mục (`document`, `procedure`, `query`,
+> `shift-handover`) trước đây vẫn tạo được và **ghi note ra gốc vault** — nay `Create` bị chặn cho tới khi
+> có thư mục, và store action từ chối thư mục rỗng, nên gốc vault không bao giờ nhận note từ template.
 > Changelog 1.15 (FR-17 — Tạo note từ template, issue #42): thêm lệnh **New note from template**
 > (command palette + ribbon) tạo note mới từ một template trong thư mục `templates` của vault: tự đặt
 > tên `<YYYY-MM-DD>-<slug>.md`, tự suy **thư mục đích** từ tên template (`meeting`→`meetings`,
@@ -725,6 +733,11 @@ bao giờ đăng ký được lệnh của nó), nên tính năng được viế
   dùng đúng `api.read` / `api.write` / tree hiện có, mở note vừa tạo và trả về path. Modal đóng khi thành
   công; thất bại thì giữ nguyên modal và hiện lỗi. **Không thêm endpoint, không thêm dependency, không
   đổi settings/schema.** Toàn bộ logic thuần nằm ở `web/src/lib/templates.ts` để test được không cần DOM.
+- **Chọn template là hành động rõ ràng (sửa 2026-09-26, issue #46)**: hover **không** chọn template
+  (chỉ là hiệu ứng), **click mới chọn**; hàng template là `<button>` nên bàn phím (Tab + Enter/Space)
+  cũng chọn được; không có template nào được chọn sẵn. Thư mục **là bắt buộc**: template không suy ra
+  được thư mục thì `Create` bị chặn kèm lý do, và action từ chối thư mục rỗng — **gốc vault không
+  bao giờ nhận note từ template**.
 - **Không làm (non-goals)**: chạy JS của plugin/Templater; định dạng `{{date:...}}`; tự tạo thư mục còn
   thiếu; setting cho thư mục template; phím tắt riêng.
 - **Phía vault (không phải code repo)**: `Wiki/templates/meeting.md` đang viết `title: Meeting — subject

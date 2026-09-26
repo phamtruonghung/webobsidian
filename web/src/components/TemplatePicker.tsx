@@ -17,8 +17,10 @@ import {
  * created as `<folder>/<YYYY-MM-DD>-<slug>.md` with the template's placeholders
  * filled in and opened for editing — the copy / rename / re-date step is gone.
  *
- * The title is what names the file, so the path the note will land on is shown
- * before anything is written.
+ * Choosing is explicit: **hovering does not pick a template, clicking does**
+ * (the rows are buttons, so keyboard selection works too). Nothing is written
+ * until the template, the title and the folder are all present, and the path the
+ * note will land on is shown before that.
  */
 export default function TemplatePicker() {
   const open = useStore((s) => s.templatePicker);
@@ -34,9 +36,10 @@ function Picker() {
   const newFromTemplate = useStore((s) => s.newFromTemplate);
 
   const [q, setQ] = useState('');
-  /** Template chosen explicitly; '' = use the first one in the folder. */
+  /** The template the human picked; '' until they do — an implicit default made
+   *  a hover look like a choice and a click look like it did nothing. */
   const [chosen, setChosen] = useState('');
-  /** Folder typed by hand; null = derive it from the template. */
+  /** Folder typed by hand; null = derive it from the chosen template. */
   const [typedFolder, setTypedFolder] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [error, setError] = useState('');
@@ -45,8 +48,8 @@ function Picker() {
   const templatesFolder = useMemo(() => findTemplatesFolder(tree), [tree]);
   const templates = useMemo(() => listTemplates(tree, templatesFolder), [tree, templatesFolder]);
 
-  const sel = chosen || templates[0]?.path || '';
-  const folder = typedFolder ?? resolveTargetFolder(tree, sel);
+  const sel = chosen;
+  const folder = typedFolder ?? (sel ? resolveTargetFolder(tree, sel) : '');
 
   if (templatesFolder === null) {
     return (
@@ -63,18 +66,27 @@ function Picker() {
   const lc = q.trim().toLowerCase();
   const shown = templates.filter((t) => !lc || t.title.toLowerCase().includes(lc));
   const slug = slugify(title.trim());
+  const dir = folder.trim();
   const date = dateStamp(new Date());
-  const targetPath = slug
-    ? uniqueNotePath(folder, `${date}-${slug}`, (p) => !!findNode(tree, p))
-    : '';
-  const canCreate = !!sel && !!slug && !busy;
+  const targetPath =
+    sel && slug && dir ? uniqueNotePath(dir, `${date}-${slug}`, (p) => !!findNode(tree, p)) : '';
+  const canCreate = !!sel && !!slug && !!dir && !busy;
+
+  /** Why the note cannot be created yet — shown instead of a dead button. */
+  const blocked = !sel
+    ? 'Pick a template above'
+    : !slug
+      ? 'Type a title to name the note'
+      : !dir
+        ? 'No folder for this template — type one, e.g. Wiki/meetings'
+        : '';
 
   const create = async () => {
     if (!canCreate) return;
     setBusy(true);
     setError('');
     try {
-      await newFromTemplate(sel, title, folder);
+      await newFromTemplate(sel, title, dir);
       setOpen(false);
     } catch (e: any) {
       setError(e?.message || 'Could not create the note');
@@ -84,7 +96,9 @@ function Picker() {
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') setOpen(false);
-    else if (e.key === 'Enter') {
+    // A focused template row is a button: Enter/Space picks it, it must not
+    // also create the note.
+    else if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') {
       e.preventDefault();
       create();
     }
@@ -95,19 +109,21 @@ function Picker() {
       <div className="modal" onClick={(e) => e.stopPropagation()} onKeyDown={onKey}>
         <input
           className="palette-input"
-          placeholder="New note from template…"
+          placeholder="Choose a template…"
           autoFocus
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
         <div className="palette-list" data-testid="template-list">
           {shown.map((t) => (
-            <div
+            <button
+              type="button"
               key={t.path}
-              className={`palette-item ${t.path === sel ? 'sel' : ''}`}
+              className={`palette-item tpl-item ${t.path === sel ? 'sel' : ''}`}
               data-testid="template-item"
               data-path={t.path}
-              onMouseEnter={() => setChosen(t.path)}
+              data-chosen={t.path === sel ? 'true' : 'false'}
+              aria-pressed={t.path === sel}
               onClick={() => {
                 setChosen(t.path);
                 setTypedFolder(null);
@@ -116,11 +132,17 @@ function Picker() {
             >
               <span>{t.title}</span>
               <span className="kbd">{t.path}</span>
-            </div>
+            </button>
           ))}
           {shown.length === 0 && <div className="palette-item">No matching template</div>}
         </div>
         <div className="tpl-form">
+          <div className="tpl-row">
+            <span className="tpl-label">Template</span>
+            <span className="tpl-chosen" data-testid="template-chosen">
+              {sel || 'none chosen'}
+            </span>
+          </div>
           <label className="tpl-row">
             <span className="tpl-label">Title</span>
             <input
@@ -143,9 +165,11 @@ function Picker() {
           </label>
           <div className="tpl-path" data-testid="template-path">
             {targetPath ? (
-              <>Creates <code>{targetPath}</code></>
+              <>
+                Creates <code>{targetPath}</code>
+              </>
             ) : (
-              'Type a title to name the note'
+              blocked
             )}
           </div>
           {error && (

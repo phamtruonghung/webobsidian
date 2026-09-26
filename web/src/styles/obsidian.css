@@ -1062,6 +1062,13 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .tpl-row { display: flex; align-items: center; gap: 10px; }
 .tpl-label { width: 52px; flex-shrink: 0; color: var(--text-muted); font-size: 12px; }
 .tpl-row .text-input { flex: 1; }
+/* The template rows are buttons (clicking picks; hovering must not), so give
+   them the palette row look back and keep hover purely cosmetic. */
+.tpl-item { width: 100%; border: 0; background: transparent; color: inherit; font: inherit;
+  text-align: left; }
+.tpl-item:hover { background: var(--bg-modifier-hover); }
+.tpl-item.sel, .tpl-item.sel:hover { background: var(--bg-modifier-active); font-weight: 600; }
+.tpl-chosen { color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
 .tpl-path { color: var(--text-faint); font-size: 12px; }
 .tpl-path code { background: var(--tag-bg); padding: 1px 5px; border-radius: var(--radius-s); }
 .tpl-error { color: var(--text-error, #e5534b); font-size: 12px; }
