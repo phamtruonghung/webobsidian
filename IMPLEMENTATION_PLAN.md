@@ -4,7 +4,22 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-26 (FR-17 — sửa lỗi chọn template: hover không chọn, click mới chọn; thư mục bắt buộc, issue #46)
+Cập nhật lần cuối: 2026-09-26 (Phase 17 — sửa các lỗi tìm thấy khi review bản production)
+
+---
+
+## Phase 17 — Review bản production: sửa lỗi UX/bảo mật/hiệu năng — FR-2/FR-3/FR-11/FR-15/NFR
+- [x] M17.1 Bảng không bẻ chữ giữa từ; bảng rộng cuộn ngang trong khung riêng (live/reading, desktop + mobile)
+- [x] M17.2 Rate limit login theo `CLIENT_IP_HEADER` (vd `CF-Connecting-IP`) khi peer là proxy tin cậy + unit test
+- [x] M17.3 WebSocket: client tự reconnect (backoff), server heartbeat 30s, `GET /ws` không upgrade → 426
+- [x] M17.4 Tasks board: cột co giãn 240–340px, nhãn "N hidden"
+- [x] M17.5 Graph: fit-to-view một lần khi layout lắng, ẩn nhãn chồng nhau, footer "N nodes · M notes"
+- [x] M17.6 Setting `ui.showInlineTitle` (Appearance → Show inline title)
+- [x] M17.7 Recent/Bookmarks: hiện thư mục cha khi trùng tên file
+- [x] M17.8 Snippet tìm kiếm bỏ cú pháp Markdown, giữ highlight (+ test); sửa line-clamp lộ dòng 3
+- [x] M17.9 Trang login dùng theme cache (localStorage) — không loé nền sáng
+- [x] M17.10 Mobile: bỏ `maximum-scale=1`, ô nhập 16px (chặn iOS auto-zoom)
+- [x] M17.11 `/assets/*` cache `max-age=1y, immutable`
 
 ---
 
@@ -648,6 +663,19 @@ Cập nhật lần cuối: 2026-09-26 (FR-17 — sửa lỗi chọn template: ho
       **0 request lỗi, 0 pageerror**.
 
 ### Nhật ký tiến độ
+- 2026-09-26 (Phase 17 — review bản production theo yêu cầu người dùng): dùng thử
+  https://webobsidian.digitalciapp.com bằng Playwright (desktop 1440px + iPhone 13) và sửa 11 điểm:
+  bảng bẻ chữ giữa từ (`.cm-lineWrapping` đặt `overflow-wrap: anywhere` + bảng bị ép theo độ rộng dòng —
+  nay cuộn ngang trong `.cm-table-scroll`, `.cm-content` được co `min-width: 0` để bảng rộng không kéo giãn
+  cả cột trên mobile); rate limit login dùng chung một bucket sau cloudflared → thêm `CLIENT_IP_HEADER`;
+  WS không reconnect + không ping (Cloudflare cắt sau ~100s rảnh) → reconnect/heartbeat/426; Tasks board
+  cột cuối bị cắt; graph nhãn chồng + mở ra bị cắt → fit một lần + declutter; inline title trùng H1 → setting;
+  Recent trùng tên; snippet search lộ Markdown; login loé theme sáng; chặn pinch-zoom; asset chỉ cache 4h.
+  Kiểm chứng: typecheck + toàn bộ test (server 149, web 133 kể cả test mới `ratelimit`/`snippet`), build, chạy
+  server local với vault thử và chụp màn hình từng điểm (bảng desktop/mobile, login tối, Recent có thư mục,
+  snippet sạch, graph fit + nhãn không chồng, Tasks), `GET /ws` → 426, `/assets/*` →
+  `max-age=31536000, immutable`, WS open→close→open qua lần restart server. **Việc cần làm trên LXC 107**:
+  thêm `CLIENT_IP_HEADER=CF-Connecting-IP` vào `/root/webobsidian/.env`.
 - 2026-09-26 (FR-17 — sửa lỗi chọn template, issue #46): người dùng báo "hover được vào template nhưng
   click không chọn được". Dựng lại bằng headless: đúng — `onMouseEnter` đặt **cùng** state mà click đặt,
   nên hover đã chọn template, còn template đầu danh sách (`abnormality`) thì được chọn sẵn; cú click không

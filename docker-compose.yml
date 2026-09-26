@@ -19,6 +19,10 @@ services:
       # (limiter keys on the TCP socket addr, not X-Forwarded-For). Set "false" only
       # for a directly-exposed instance with no proxy. See .env.example.
       TRUST_PROXY: ${TRUST_PROXY:-true}
+      # Header with the real client IP from the proxy in front (e.g. CF-Connecting-IP
+      # behind a Cloudflare tunnel) so the login limit is per visitor, not shared by
+      # everyone arriving via the proxy. Empty = key on the socket address.
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
       VAULT_PATH: /vault
       DATA_DIR: /data
       ALLOWED_ROOTS: /vault

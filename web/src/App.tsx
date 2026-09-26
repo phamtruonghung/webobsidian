@@ -68,15 +68,25 @@ export default function App() {
       .catch(() => {});
     api
       .getSettings()
-      .then((s) => setTheme(themeClass(s?.ui?.theme)))
+      .then((s) => {
+        setTheme(themeClass(s?.ui?.theme));
+        useStore.getState().setShowInlineTitle(s?.ui?.showInlineTitle !== false);
+      })
       .catch(() => {});
     useStore.getState().loadShares(); // badge shared notes in the file tree
     loadPlugins().catch(() => {});
-    // websocket live updates
+    // websocket live updates. Reconnects with backoff: the socket drops on every
+    // redeploy, laptop sleep or proxy idle-timeout, and without this live updates
+    // silently stopped until a full reload. After a reconnect the tree is reloaded
+    // once, since fs events may have been missed while disconnected.
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    let ws: WebSocket | undefined;
     let treeTimer: number | undefined;
-    ws.onmessage = (ev) => {
+    let retryTimer: number | undefined;
+    let retryDelay = 1000;
+    let hadConnection = false;
+    let closed = false;
+    const onMessage = (ev: MessageEvent) => {
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'fs') {
@@ -93,9 +103,27 @@ export default function App() {
         /* ignore */
       }
     };
+    const connect = () => {
+      if (closed) return;
+      ws = new WebSocket(`${proto}://${location.host}/ws`);
+      ws.onopen = () => {
+        retryDelay = 1000;
+        if (hadConnection) loadTree();
+        hadConnection = true;
+      };
+      ws.onmessage = onMessage;
+      ws.onclose = () => {
+        if (closed) return;
+        retryTimer = window.setTimeout(connect, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30_000);
+      };
+    };
+    connect();
     return () => {
+      closed = true;
       window.clearTimeout(treeTimer);
-      ws.close();
+      window.clearTimeout(retryTimer);
+      ws?.close();
     };
   }, [authed, loadTree]);
 

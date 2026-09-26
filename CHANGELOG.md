@@ -7,6 +7,11 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 ## [Unreleased]
 
 ### Added
+- **Settings → Appearance → Show inline title.** Turn off the file-name title above each note when your
+  notes already open with their own heading (on by default, like Obsidian).
+- **`CLIENT_IP_HEADER`** (e.g. `CF-Connecting-IP`): behind a tunnel every visitor shares the proxy's
+  address, so ten wrong guesses from anyone locked the owner out of login for 15 minutes. With this set,
+  the login limit is per visitor. The header is only trusted from a peer that `TRUST_PROXY` trusts.
 - **New note from template — the copy, rename and re-date steps are gone.** A `New note from template`
   command (command palette + a ribbon button) lists the templates in your vault's `templates` folder,
   takes a title, and creates `<folder>/<YYYY-MM-DD>-<slug>.md` with the template's placeholders filled
@@ -18,6 +23,21 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   create-only server-side) and it does not create a missing folder — it names it instead. *(issue #42)*
 
 ### Fixed
+- **Tables no longer break words in half** ("Own|er", "hun|g"). Wide tables scroll sideways in their
+  own box instead of being squeezed to the line width, on desktop and phone.
+- **Live updates survive disconnects.** The browser reconnects the WebSocket with backoff (and reloads
+  the file tree once), the server pings every 30s so proxies like Cloudflare don't drop idle sockets,
+  and a plain `GET /ws` answers `426` instead of the app's HTML so a proxy stripping upgrades is obvious.
+- **Graph view** fits the whole graph once the layout settles (only zooming out, and not if you already
+  moved the camera), hides labels that would overlap (busiest nodes keep theirs), and the footer reads
+  "N nodes · M notes".
+- **Tasks board** columns flex (240–340px) so four fit a laptop screen; per-column label reads "N hidden".
+- **Recent / Bookmarks** show the parent folder when two entries share a file name.
+- **Search snippets** drop Markdown syntax (`[[…]]`, `**`, `#`, table pipes) and no longer show a sliver
+  of a third line.
+- **Login screen** uses the theme this browser last used instead of flashing light.
+- **Mobile**: pinch-zoom is no longer blocked; form fields are 16px so iOS doesn't zoom on focus.
+- **Faster repeat loads**: hashed `/assets/*` files are cached for a year (`immutable`).
 - **The timeline now actually lands on today.** `scrollToToday()` ran on mount while the task list
   was still empty: the placeholder range fit the pane, so `scrollLeft` clamped to 0, and the stale
   offset meant the today line sat off-screen — invisible in both themes. The landing now re-runs when

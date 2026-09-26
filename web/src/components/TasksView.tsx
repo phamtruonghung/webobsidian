@@ -379,12 +379,12 @@ export default function TasksView() {
           >
             <div className="task-column-head">
               <span className="task-column-title">{col.label}</span>
-              <span className="task-column-count">{col.tasks.length}</span>
               {col.hidden > 0 && (
                 <span className="task-column-hidden" title={`${col.hidden} hidden by the status filter`}>
-                  +{col.hidden} hidden
+                  {col.hidden} hidden
                 </span>
               )}
+              <span className="task-column-count">{col.tasks.length}</span>
             </div>
             <div className="task-column-body">
               {col.tasks.map((t) => (

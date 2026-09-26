@@ -393,6 +393,12 @@ function Plugins() {
 
 function Appearance({ s }: { s: any }) {
   const [theme, setTheme] = useState(s.ui.theme);
+  const [inlineTitle, setInlineTitle] = useState(s.ui.showInlineTitle !== false);
+  const saveInlineTitle = async (v: boolean) => {
+    setInlineTitle(v);
+    useStore.getState().setShowInlineTitle(v);
+    await api.putSettings({ ui: { showInlineTitle: v } });
+  };
   // Apply the theme live (no reload — keeps the Settings dialog open), then persist.
   const save = async (t: string) => {
     setTheme(t);
@@ -415,6 +421,9 @@ function Appearance({ s }: { s: any }) {
             <option value="catppuccin-latte">Catppuccin Latte</option>
           </optgroup>
         </select>
+      </Row>
+      <Row name="Show inline title" desc="Display the file name as a title above the note. Turn it off if your notes start with their own heading.">
+        <input type="checkbox" checked={inlineTitle} onChange={(e) => saveInlineTitle(e.target.checked)} />
       </Row>
     </div>
   );

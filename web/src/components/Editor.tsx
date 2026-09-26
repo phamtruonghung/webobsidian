@@ -61,6 +61,7 @@ export default function Editor() {
   const setContent = useStore((s) => s.setContent);
   const save = useStore((s) => s.save);
   const viewMode = useStore((s) => s.viewMode);
+  const showInlineTitle = useStore((s) => s.showInlineTitle);
   const openWikilink = useStore((s) => s.openWikilink);
   const openContextMenu = useStore((s) => s.openContextMenu);
   const setLeftPanel = useStore((s) => s.setLeftPanel);
@@ -337,10 +338,10 @@ export default function Editor() {
         setLivePreviewEnabled.of(isMd && viewMode !== 'source'),
         setLivePreviewReadonly.of(viewMode === 'reading'),
         readonlyComp.reconfigure(readonlyExt(viewMode === 'reading')),
-        setNoteTitle.of(titleOf(activePath)),
+        setNoteTitle.of(showInlineTitle ? titleOf(activePath) : ''),
       ],
     });
-  }, [viewMode, activePath]);
+  }, [viewMode, activePath, showInlineTitle]);
 
   // Debounced autosave.
   useEffect(() => {

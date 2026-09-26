@@ -780,7 +780,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   background: #fff; resize: vertical; overflow: auto; }
 .markdown-preview blockquote { border-left: 3px solid var(--interactive-accent); margin: .8em 0; padding: 2px 24px; color: var(--text-normal); }
 .markdown-preview img { max-width: 100%; border-radius: var(--radius); cursor: zoom-in; }
-.markdown-preview table { border-collapse: collapse; margin: .6em 0; }
+.markdown-preview table { border-collapse: collapse; margin: .6em 0; display: block; overflow-x: auto; max-width: 100%; overflow-wrap: normal; word-break: normal; }
 .markdown-preview th, .markdown-preview td { border: 1px solid var(--bg-modifier-border); padding: 4px 10px; text-align: left; vertical-align: top; }
 .markdown-preview th { font-weight: 600; background: var(--bg-secondary); }
 .markdown-preview ul, .markdown-preview ol { padding-left: 1.6em; }
@@ -971,7 +971,9 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .rg-body { padding: 0 6px 4px 22px; }
 .rg-match {
   position: relative; color: var(--text-muted); font-size: 12px; line-height: 1.45;
-  padding: 4px 8px; margin: 2px 0; border-radius: var(--radius-s); cursor: pointer;
+  /* Vertical spacing via transparent borders, not padding: line-clamp's overflow
+     clips at the padding edge, so padding let a sliver of line 3 show through. */
+  padding: 0 8px; border-block: 4px solid transparent; margin: 2px 0; border-radius: var(--radius-s); cursor: pointer;
   background: var(--bg-primary-alt);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
@@ -995,6 +997,7 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .panel-item:hover .panel-item-actions { opacity: 1; }
 .panel-item-actions > span { display: flex; padding: 2px; border-radius: var(--radius-s); color: var(--text-faint); }
 .panel-item-actions > span:hover { color: var(--text-normal); background: var(--bg-modifier-hover); }
+.panel-item-hint { margin-left: 6px; font-size: 11px; color: var(--text-faint); }
 
 /* Folder content view (deep-link /note/<folder>) */
 .folder-view-head { display: flex; align-items: center; gap: 10px; }
@@ -1161,7 +1164,8 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   color: var(--text-accent); font-size: 11.5px; padding: 3px 10px; cursor: pointer;
 }
 .tasks-show-all:hover { border-color: var(--interactive-accent); }
-.task-column-hidden { font-size: 10.5px; color: var(--text-faint); margin-left: 4px; }
+.task-column-hidden { font-size: 10.5px; font-weight: 400; color: var(--text-faint); margin-left: auto; white-space: nowrap; }
+.task-column-hidden + .task-column-count { margin-left: 0; }
 .tasks-empty p { max-width: 420px; }
 .tasks-empty code { background: var(--bg-modifier-hover); padding: 1px 5px; border-radius: var(--radius-s); }
 .tasks-empty-link { display: inline-flex; margin-top: 8px; width: auto; padding: 6px 14px; color: var(--text-accent); }
@@ -1171,7 +1175,9 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
   align-items: flex-start;
 }
 .task-column {
-  flex: 0 0 280px; width: 280px; max-height: 100%; display: flex; flex-direction: column;
+  /* Grow to share the board width (so four columns fit a laptop screen without
+     the last one being cut off), but never below 240px — past that the board scrolls. */
+  flex: 1 0 240px; min-width: 240px; max-width: 340px; max-height: 100%; display: flex; flex-direction: column;
   background: var(--bg-secondary); border: 1px solid var(--bg-modifier-border); border-radius: var(--radius-m);
 }
 .task-column.drag-over { border-color: var(--interactive-accent); box-shadow: 0 0 0 2px var(--bg-modifier-active); }
@@ -1546,7 +1552,7 @@ button.task-due:hover .task-due-caret { opacity: 1; }
 
   /* Tasks board: touch-sized hit targets, columns stay finger-scrollable. */
   .tasks-toolbar .text-input { flex: 1 1 140px; min-width: 0; }
-  .task-column { flex-basis: 82vw; width: 82vw; }
+  .task-column { flex-basis: 82vw; width: 82vw; max-width: none; }
   .task-card { padding: 12px 10px; }
   .task-card-menu { width: 32px; height: 32px; }
 
@@ -1563,6 +1569,11 @@ button.task-due:hover .task-due-caret { opacity: 1; }
 
   /* Toast clears the bottom toolbar + home indicator. */
   .app.mobile .toast { bottom: calc(64px + env(safe-area-inset-bottom)); }
+
+  /* ---- Form fields at 16px: iOS Safari auto-zooms into any focused field below
+     16px. index.html no longer sets maximum-scale=1 (that also blocked pinch-zoom,
+     an accessibility failure), so this is what keeps focus from zooming. ---- */
+  input, textarea, select { font-size: 16px; }
 
   /* ---- The note "…" menu (and any context menu) must fit the screen. ---- */
   /* It can be tall (rename/move/copy/export/version/share/delete…); cap it to
@@ -1590,7 +1601,6 @@ button.task-due:hover .task-due-caret { opacity: 1; }
   .app.mobile .markdown-preview img,
   .app.mobile .markdown-preview pre,
   .app.mobile .cm-content img { max-width: 100%; }
-  .app.mobile .markdown-preview table { display: block; overflow-x: auto; max-width: 100%; }
   .app.mobile .prop-key { min-width: 92px; }
   .app.mobile .properties .prop-row,
   .app.mobile .cm-properties .prop-row { flex-wrap: wrap; }

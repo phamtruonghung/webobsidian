@@ -491,6 +491,10 @@ export default function GraphView() {
     cand.sort((u, v) => (v.n === h ? 1 : 0) - (u.n === h ? 1 : 0) || v.n.deg - u.n.deg);
     const MAX = Math.min(cand.length, 400);
 
+    // Declutter: candidates are sorted hovered-first then by degree, so skip any
+    // label that would overlap one already placed — hubs keep their labels and
+    // the rest appear as you zoom in and they spread apart.
+    const placed: { l: number; r: number; t: number; b: number }[] = [];
     let li = 0;
     for (let ci = 0; ci < MAX; ci++) {
       const { n, sx, sy, a } = cand[ci];
@@ -517,6 +521,12 @@ export default function GraphView() {
       t.scale.set(sc);
       t.x = sx;
       t.y = sy + (r + 5) * rs + (isH ? 15 / dpr : 0);
+      const box = { l: t.x - t.width / 2, r: t.x + t.width / 2, t: t.y, b: t.y + t.height };
+      if (!isH && placed.some((o) => box.l < o.r && box.r > o.l && box.t < o.b && box.b > o.t)) {
+        li--; // give the pooled Text back; it's reused (or hidden) below
+        continue;
+      }
+      placed.push(box);
       t.alpha = a;
       t.visible = true;
     }
@@ -575,6 +585,30 @@ export default function GraphView() {
     cam.current = { k, x: (W / 2) * (1 - k), y: (H / 2) * (1 - k) };
     zoomTarget.current = 1; // device scale, like Obsidian's scale = targetScale = 1
     zoomAnchor.current = null;
+  };
+
+  // Animate the camera (via the fly-to animation) so every node fits the view.
+  // Only zooms out: a small graph keeps Obsidian's default scale.
+  const fitToView = () => {
+    const nodes = nodesRef.current;
+    const wrap = wrapRef.current;
+    if (!nodes.length || !wrap) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const n of nodes) {
+      x0 = Math.min(x0, n.x ?? 0);
+      y0 = Math.min(y0, n.y ?? 0);
+      x1 = Math.max(x1, n.x ?? 0);
+      y1 = Math.max(y1, n.y ?? 0);
+    }
+    const W = wrap.clientWidth || 900;
+    const H = wrap.clientHeight || 600;
+    const PAD = 80; // room for node radius + label below the outermost nodes
+    const k = Math.min((W - PAD * 2) / Math.max(1, x1 - x0), (H - PAD * 2) / Math.max(1, y1 - y0));
+    const target = Math.max(SCALE_MIN, k * dprNow());
+    if (target >= devScale(cam.current.k)) return; // already fits
+    zoomTarget.current = target;
+    flyNode.current = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 } as GNode;
+    scheduleRender(true);
   };
 
   const applyDisplay = () => {
@@ -843,7 +877,18 @@ export default function GraphView() {
         .alphaDecay(1 - Math.pow(0.001, 1 / 300))
         .velocityDecay(0.4);
       userMoved.current = false;
-      sim.on('tick', () => scheduleRender(true));
+      // Obsidian opens at scale 1 and lets the graph bloom past the edges; on a
+      // real vault that leaves most nodes off-screen. Once the layout has mostly
+      // settled, ease out (never in) so the whole graph fits — unless the user
+      // already took the camera.
+      let fitted = false;
+      sim.on('tick', () => {
+        if (!fitted && sim && sim.alpha() < 0.1) {
+          fitted = true;
+          if (!userMoved.current) fitToView();
+        }
+        scheduleRender(true);
+      });
       simRef.current = sim;
       setSceneVersion((v) => v + 1); // tell the renderer to (re)create sprites
     } catch (err) {
@@ -1242,7 +1287,7 @@ export default function GraphView() {
         </div>
 
         <div className="graph-hint">
-          {stats.shown} / {stats.total} notes · {stats.orphans} orphans · scroll to zoom · drag to pan · click a tag to search
+          {stats.shown} nodes · {stats.total} notes · {stats.orphans} orphans · scroll to zoom · drag to pan · click a tag to search
         </div>
 
         {buildError && (
