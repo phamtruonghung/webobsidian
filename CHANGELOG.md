@@ -7,6 +7,12 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 ## [Unreleased]
 
 ### Added
+- **Vault locks — notes the browser cannot write.** Mark paths in `_system/locks.json` (raw evidence,
+  generated boards and indexes, `_system/` itself) and a *session* write is refused with `423 locked`
+  while an **API key keeps writing** — the app's two writers were already separate, so a lock is a guard
+  on one router rather than a second permission system. Locked notes show a 🔒 in the file tree and open
+  read-only with a banner that states the reason; unlocking is deliberate (`confirm` dialog, the operator
+  password, or `off` for none). See [docs/LOCKS.md](docs/LOCKS.md).
 - **Settings → Appearance → Show inline title.** Turn off the file-name title above each note when your
   notes already open with their own heading (on by default, like Obsidian).
 - **`CLIENT_IP_HEADER`** (e.g. `CF-Connecting-IP`): behind a tunnel every visitor shares the proxy's
@@ -23,6 +29,13 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   create-only server-side) and it does not create a missing folder — it names it instead. *(issue #42)*
 
 ### Fixed
+- **Reading a note that does not exist is a `404`, not a `500`.** `GET /api/files/content` resolved a
+  missing path by basename (the `![[image.png]]` embed case) and then read it anyway, so ENOENT surfaced
+  as a 500. Found by the new live lock assertion in `deploy/smoke.sh`.
+- **"Open today's daily note" writes to the vault's own daily folder** (issue #52). It hard-coded
+  `Daily/<iso>.md` at the vault root, so a vault that keeps daily notes deeper — `relats/daily/` here —
+  grew a stray file at the root on every press. It now picks the **shallowest** `daily/` folder in the
+  tree, falling back to a root `Daily/` only for vaults that have no daily folder at all.
 - **The `[[` link suggester no longer renders black-on-dark.** The popup was mounted outside the
   themed wrapper whenever the active theme is one of the four **Catppuccin** themes (the lookup only
   matched `.theme-light, .theme-dark`), where the palette variables don't resolve: titles came out

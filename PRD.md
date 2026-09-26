@@ -1,7 +1,20 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.18 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Phiên bản: 1.20 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Changelog 1.20 (FR-20 — hai lỗi đường dẫn: note không tồn tại trả 500 thay vì 404; lệnh daily note
+> ghi ra `Daily/<iso>.md` ở gốc vault bất kể vault đặt thư mục daily ở đâu, issue #52 và #55): lỗi 404
+> do `GET /api/files/content` giải đường dẫn theo basename (cho embed `![[image.png]]`) rồi vẫn đọc tiếp
+> khi chưa thấy file, nên ENOENT của `readFileText` nổi lên thành 500 — sửa bằng một nhánh trả
+> `404 {error:"not_found"}` sau khi đã thử giải basename; lỗi daily note do `web/src/lib/store.ts` suy ra
+> đường dẫn `Daily/<iso>.md` cứng ở gốc vault, sinh file rác ở gốc cho mọi vault có thư mục daily nằm sâu
+> hơn — sửa bằng cách chọn thư mục `daily/` **nông nhất** trong cây, chỉ rơi về `Daily/` gốc khi vault
+> không có thư mục daily nào.
+> Changelog 1.19 (FR-19 — khoá ghi chú cho trình duyệt (vault locks), issue #53 và #54): app vốn đã tách
+> hai đường ghi (`/api/files/*` bằng cookie phiên cho người dùng, `/api/v1/*` bằng `X-API-Key` cho agent),
+> nên khoá chỉ cần là một middleware trên router của phiên: `_system/locks.json` liệt kê glob + lý do, phiên
+> bị từ chối bằng `423 Locked`, agent vẫn ghi bình thường. Cây file hiện 🔒, editor chuyển read-only kèm
+> banner nêu lý do; mở khoá có chủ ý theo `unlock` = `confirm` / `password` / `off`.
 > Changelog 1.18 (FR-18 — sửa lỗi popup gợi ý trên theme Catppuccin, issue #49): gõ `[[` để chèn liên
 > kết trên theme Catppuccin thì danh sách gợi ý hiện **chữ đen** (theme đang dùng là `catppuccin-mocha`,
 > một theme tối) — popup bị mount ra ngoài wrapper theme vì nơi mount chỉ tìm `.theme-light, .theme-dark`,
@@ -800,6 +813,64 @@ theo theme đang dùng — gồm cả bốn theme Catppuccin, không chỉ Obsid
 - **Không làm (non-goals)**: đổi cách khai báo palette (giữ trên wrapper, không đẩy lên `:root`); sửa phép
   thử `document.querySelector('.theme-dark')` dùng làm cờ "đang tối" cho mermaid (`lib/livePreview.ts`,
   `components/Preview.tsx`) — đó là lỗi khác (mermaid render sai theme trên Catppuccin), tách issue riêng.
+
+### FR-19 · Khoá ghi chú — trang chỉ đọc với trình duyệt (vault locks) (issue #53, #54)
+Mục tiêu: một số note **không được sửa tay** — bằng chứng thô (hash chính là hồ sơ), board/index sinh tự
+động, quy tắc của vault — nhưng trình duyệt rất giỏi sửa file do tai nạn (một phím lạc trong khung xem
+trước, một lần dán nhầm tab). Khoá lại: vẫn đọc/tìm kiếm được, chỉ từ chối ghi, và **nói rõ vì sao**.
+
+- **Vì sao không cần hệ quyền thứ hai**: app vốn có **hai đường ghi tách biệt** — `/api/files/*` xác thực
+  bằng cookie phiên (người dùng trên trình duyệt) và `/api/v1/*` xác thực bằng `X-API-Key` (agent, MCP).
+  Khoá là một middleware trên router của phiên; đường của agent không đi qua middleware đó nên không bị
+  ảnh hưởng — và đó chính là mục đích: agent vẫn là bên bảo trì những note ấy.
+- **Khai báo nằm trong vault**: `_system/locks.json` —
+  `{"unlock": "confirm", "locked": [{"glob": "relats/raw/**", "reason": "…"}]}`. Glob: `**` mọi độ sâu,
+  `*` trong một tầng, `?` một ký tự; so khớp **không phân biệt hoa/thường** (vault hay được clone qua
+  filesystem khác nhau). Thiếu file, hoặc file JSON hỏng ⇒ **không khoá gì**: một cấu hình sai không bao
+  giờ được phép chặn việc ghi.
+- **Phạm vi**: ghi nội dung, đổi tên, di chuyển, upload vào thư mục khoá, xoá. Đọc, tìm kiếm, graph,
+  export **không đổi**. Thư mục bị khoá cũng không phải nguồn để copy/move *ra* bằng trình duyệt — một
+  luật duy nhất, không có ngoại lệ ngầm.
+- **API**: phiên ghi vào đường bị khoá nhận `423 Locked` +
+  `{error:"locked", path, reason, unlock}`. `GET /api/files` gắn `locked` + `lockReason` cho từng node;
+  `GET /api/files/content` trả thêm `locked`, `lockReason`, `unlock` — đủ để editor dựng banner mà không
+  cần request thứ hai. Riêng `POST /api/files/upload` kiểm tra trong handler (đường dẫn nằm trong body
+  multipart, chỉ có sau khi multer phân tích xong).
+- **Giao diện**: 🔒 ở cây file (tooltip = lý do); mở note bị khoá thì editor chuyển read-only và hiện
+  banner `Read-only. <lý do>`; phím gõ không vào được editor (cùng cơ chế với chế độ reading).
+- **Mở khoá có chủ ý** (`unlock`): `confirm` (nút **Edit anyway**, có hộp thoại xác nhận; từ đó mỗi request
+  ghi mang header `x-unlock-locked: 1`) · `password` (hỏi mật khẩu operator, server kiểm tra bằng đúng hash
+  của login) · `off` (không có nút nào — chỉ còn đường qua agent). Mặc định `confirm`, vì **một cái khoá
+  không có lối ra sẽ dạy người dùng tắt khoá**.
+- **Kiểm chứng**: 13 unit test (`server/src/services/locks.test.ts`: glob, parse cấu hình, cả ba chế độ mở
+  khoá); `scripts/smoke-test.sh` scenario G — cây file đánh dấu đúng note bị khoá và không đánh dấu note
+  bên cạnh, phiên ghi bị từ chối `423 locked`, **file không đổi một byte trên đĩa**, header mở khoá hoạt
+  động, note không khoá vẫn lưu, và **key của agent ghi được đúng note đang bị khoá**; `deploy/smoke.sh`
+  khẳng định lại trên **container thật** sau mỗi lần deploy (đọc `_system/locks.json` qua cây file, ghi thử
+  vào thư mục khoá đầu tiên tìm được, rồi kiểm tra lần từ chối đó không để lại gì) — lần chạy đầu đã bắt
+  ngay một lỗi thật (FR-20.1).
+- **Không làm (non-goals)**: mã hoá nội dung note (khoá để chống **sửa nhầm**, không chống người có quyền
+  truy cập filesystem — vault vẫn là markdown thuần, đó là thiết kế); phân quyền theo người dùng; khoá
+  từng đoạn bên trong một note.
+- **Tài liệu**: `docs/LOCKS.md` (cấu hình, các chế độ, phản hồi API), README (§ Features), và quy tắc trong
+  vault của người dùng (`_system/SCHEMA.md`, `relats/routine.md`).
+
+### FR-20 · Hai lỗi đường dẫn: note không tồn tại trả 500, và daily note về sai thư mục (issue #52, #55)
+Mục tiêu: cùng một chỗ — không phân biệt được "không có file" với "đọc lỗi", và suy ra thư mục daily bằng
+đường dẫn cứng.
+
+- **FR-20.1 · Đọc note không tồn tại trả `500` (tìm ra bởi assert của FR-19)**: `GET /api/files/content`
+  thử giải đường dẫn theo basename cho ca embed `![[image.png]]`; nếu vẫn không thấy file thì **vẫn đọc
+  tiếp**, nên ENOENT của `readFileText` nổi lên thành 500. Sửa: sau khi giải basename, nếu vẫn thiếu thì
+  trả `404 {error:"not_found", path}`. Assert tương ứng có trong `scripts/smoke-test.sh` scenario G.
+- **FR-20.2 · Lệnh "Open today's daily note" ghi sai chỗ (issue #52)**: `web/src/lib/store.ts` hardcode
+  `Daily/<iso>.md` ở **gốc vault**, nên với vault đặt daily note trong `relats/daily/` (đúng như vault này)
+  mỗi lần bấm nút lại sinh một file rác ở gốc — lần theo dõi phải phát hiện, chụp lại và dọn. Sửa: chọn
+  thư mục `daily/` **nông nhất** trong cây (khớp Obsidian mặc định), chỉ rơi về `Daily/` ở gốc khi vault
+  **không có** thư mục daily nào; hành vi cũ giữ nguyên cho mọi vault chưa có thư mục daily.
+- **Kiểm chứng**: `deploy/smoke.sh` trên container thật ở build `555fc60` (FR-20.2) và `b7233be` (FR-19 +
+  FR-20.1) — 10/10 PASS, gồm cả hai assert mới của khoá; `npm test` và `scripts/smoke-test.sh` (31 PASS)
+  sạch; `docs/DEPLOYMENT.md` ghi thứ tự giải đường dẫn daily note.
 
 ## 4. Yêu cầu phi chức năng (NFR)
 - **Bảo mật**: password hash scrypt, JWT secret tự sinh, API key hash khi lưu, path traversal guard
