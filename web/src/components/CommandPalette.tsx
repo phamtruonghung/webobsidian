@@ -40,6 +40,7 @@ export default function CommandPalette() {
   const save = useStore((s) => s.save);
   const toggleBookmark = useStore((s) => s.toggleBookmark);
   const openDailyNote = useStore((s) => s.openDailyNote);
+  const setTemplatePicker = useStore((s) => s.setTemplatePicker);
   const newNote = useStore((s) => s.newNote);
   const newCanvas = useStore((s) => s.newCanvas);
   const notify = useStore((s) => s.notify);
@@ -51,6 +52,7 @@ export default function CommandPalette() {
   const commands: Cmd[] = useMemo(
     () => [
       { id: 'new', title: 'New note', hint: '⌘N', run: () => newNote() },
+      { id: 'new-from-template', title: 'New note from template', run: () => setTemplatePicker(true) },
       { id: 'new-canvas', title: 'New canvas', run: () => newCanvas() },
       { id: 'daily', title: 'Open today’s daily note', run: () => openDailyNote() },
       { id: 'save', title: 'Save current file', hint: '⌘S', run: () => save() },

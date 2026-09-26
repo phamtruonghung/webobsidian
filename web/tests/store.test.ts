@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, mock, test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
-import { api } from '../src/lib/api';
+import { ApiError, api, type TreeNode } from '../src/lib/api';
 import { GRAPH_PATH, TASKS_PATH, isViewPath, useStore } from '../src/lib/store';
 
 // Workspace persistence uses browser timers; run them deterministically in Node.
@@ -185,4 +185,176 @@ test('workspace reload preserves preview state and treats legacy tabs as permane
   state().keepTab('Next.md');
   mock.timers.tick(500);
   assert.equal(writes.mock.calls.at(-1)!.arguments[0].tabs[1].preview, false);
+});
+
+// ---- New note from template (FR-17) --------------------------------------
+
+/** The vault shape the command resolves folders against. */
+const VAULT_TREE: TreeNode = {
+  name: '',
+  path: '',
+  type: 'folder',
+  children: [
+    {
+      name: 'Wiki',
+      path: 'Wiki',
+      type: 'folder',
+      children: [
+        {
+          name: 'templates',
+          path: 'Wiki/templates',
+          type: 'folder',
+          children: [
+            { name: 'meeting.md', path: 'Wiki/templates/meeting.md', type: 'file', ext: 'md' },
+          ],
+        },
+        { name: 'meetings', path: 'Wiki/meetings', type: 'folder', children: [] },
+      ],
+    },
+  ],
+};
+
+/** A template in both token and literal form, so both paths are exercised. */
+const MEETING_TEMPLATE = [
+  '---',
+  'title: {{title}}',
+  'created: {{date}}',
+  'updated: {{date}}',
+  'type: meeting',
+  'date: {{date}}',
+  'tags: [meeting]',
+  'sources: [raw/meetings/YYYY-MM-DD-slug.md]',
+  '---',
+  '',
+  '# {{title}}',
+  '',
+  '<!-- created {{time}} -->',
+].join('\n');
+
+/** Pin the clock so the dated path and the filled tokens are exact. */
+const freeze = (y: number, m: number, d: number, h: number, min: number) => {
+  // The file-level beforeEach already enabled the setTimeout mocks; swap in a
+  // frozen clock (Date too) so the dated path and times are exact.
+  mock.timers.reset();
+  mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  mock.timers.setTime(new Date(y, m - 1, d, h, min).getTime());
+};
+
+test('newFromTemplate creates the dated, filled note and opens it', async () => {
+  freeze(2026, 9, 26, 7, 30);
+  useStore.setState({ tree: VAULT_TREE });
+  mock.method(api, 'tree', async () => VAULT_TREE);
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  mock.method(api, 'read', async () => ({ content: MEETING_TEMPLATE }));
+
+  const path = await state().newFromTemplate(
+    'Wiki/templates/meeting.md',
+    'QMS review with Ban',
+    'Wiki/meetings',
+  );
+
+  assert.equal(path, 'Wiki/meetings/2026-09-26-qms-review-with-ban.md');
+  assert.equal(state().activePath, path, 'the new note is the open tab');
+  assert.match(state().toast, /Created from template/);
+  assert.deepEqual(writes.mock.calls[0].arguments, [
+    path,
+    [
+      '---',
+      'title: QMS review with Ban',
+      'created: 2026-09-26',
+      'updated: 2026-09-26',
+      'type: meeting',
+      'date: 2026-09-26',
+      'tags: [meeting]',
+      'sources: [raw/meetings/2026-09-26-qms-review-with-ban.md]',
+      '---',
+      '',
+      '# QMS review with Ban',
+      '',
+      '<!-- created 07:30 -->',
+    ].join('\n'),
+    '', // create-only: the path must not exist yet
+  ]);
+});
+
+test('newFromTemplate never overwrites — an existing same-day note moves to -2', async () => {
+  freeze(2026, 9, 26, 7, 30);
+  const taken = 'Wiki/meetings/2026-09-26-qms-review-with-ban.md';
+  const tree: TreeNode = {
+    ...VAULT_TREE,
+    children: [
+      {
+        ...VAULT_TREE.children![0],
+        children: [
+          ...(VAULT_TREE.children![0].children ?? []),
+          { name: '2026-09-26-qms-review-with-ban.md', path: taken, type: 'file', ext: 'md' },
+        ],
+      },
+    ],
+  };
+  useStore.setState({ tree });
+  mock.method(api, 'tree', async () => tree);
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  mock.method(api, 'read', async () => ({ content: MEETING_TEMPLATE }));
+
+  const path = await state().newFromTemplate('Wiki/templates/meeting.md', 'QMS review with Ban', 'Wiki/meetings');
+
+  assert.equal(path, 'Wiki/meetings/2026-09-26-qms-review-with-ban-2.md');
+  assert.equal(writes.mock.calls[0].arguments[0], path);
+});
+
+test('newFromTemplate retries the next suffix when a concurrent writer wins the race', async () => {
+  freeze(2026, 9, 26, 7, 30);
+  useStore.setState({ tree: VAULT_TREE });
+  mock.method(api, 'tree', async () => VAULT_TREE);
+  mock.method(api, 'read', async () => ({ content: MEETING_TEMPLATE }));
+  let first = true;
+  const writes = mock.method(api, 'write', async (path: string) => {
+    if (first) {
+      first = false;
+      throw new ApiError('version_conflict', 409);
+    }
+    return { ok: true, path };
+  });
+
+  const path = await state().newFromTemplate('Wiki/templates/meeting.md', 'QMS review with Ban', 'Wiki/meetings');
+
+  assert.equal(path, 'Wiki/meetings/2026-09-26-qms-review-with-ban-2.md');
+  assert.deepEqual(
+    writes.mock.calls.map((c) => c.arguments[0]),
+    ['Wiki/meetings/2026-09-26-qms-review-with-ban.md', path],
+  );
+});
+
+test('newFromTemplate refuses a title that yields no filename, and writes nothing', async () => {
+  useStore.setState({ tree: VAULT_TREE });
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  await assert.rejects(
+    () => state().newFromTemplate('Wiki/templates/meeting.md', '   ', 'Wiki/meetings'),
+    /title is required/i,
+  );
+  assert.equal(writes.mock.calls.length, 0);
+});
+
+test('newFromTemplate refuses a folder that does not exist, and writes nothing', async () => {
+  useStore.setState({ tree: VAULT_TREE });
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  await assert.rejects(
+    () => state().newFromTemplate('Wiki/templates/meeting.md', 'QMS review', 'Wiki/nope'),
+    /Folder not found: Wiki\/nope/,
+  );
+  assert.equal(writes.mock.calls.length, 0);
+});
+
+test('newFromTemplate lets a failed template read through, writing nothing', async () => {
+  useStore.setState({ tree: VAULT_TREE });
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  mock.method(api, 'read', async () => {
+    throw new Error('Not found');
+  });
+  await assert.rejects(
+    () => state().newFromTemplate('Wiki/templates/gone.md', 'QMS review', 'Wiki/meetings'),
+    /Not found/,
+  );
+  assert.equal(writes.mock.calls.length, 0);
 });
