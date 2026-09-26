@@ -2229,3 +2229,44 @@ audio.media-embed { display: block; width: min(100%, 480px); max-width: 100%; ma
 }
 .image-lightbox-close:hover { background: rgba(255, 255, 255, .18); }
 .image-lightbox-close svg { width: 22px; height: 22px; }
+
+
+/* ---- Vault locks: read-only notes the agent maintains (`_system/locks.json`) ----
+   Deliberately quiet: a hairline top border and no bright fill, so a locked note still
+   looks like a note — the banner only has to be noticed, not obeyed. */
+.lock-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 12px);
+  line-height: 1.4;
+}
+.lock-banner .lock-msg { flex: 1 1 auto; }
+.lock-banner .lock-msg strong { color: var(--text-normal); font-weight: 600; }
+.lock-banner .lock-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.lock-banner button {
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s, 4px);
+  padding: 2px 8px;
+  font-size: var(--font-ui-smaller, 12px);
+  cursor: pointer;
+}
+.lock-banner button:hover { background: var(--interactive-hover); }
+.lock-banner input {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s, 4px);
+  padding: 2px 6px;
+  font-size: var(--font-ui-smaller, 12px);
+  width: 120px;
+}
+/* The tree badge — same slot as the bookmark star, muted so it reads as metadata. */
+.lock-badge { display: inline-flex; align-items: center; color: var(--text-faint, var(--text-muted)); }
+.nav-file-title:hover .lock-badge, .nav-file-title.is-active .lock-badge { color: var(--text-muted); }

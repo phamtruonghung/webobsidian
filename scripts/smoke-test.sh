@@ -192,6 +192,55 @@ else
   echo "  FAIL  server did not start (scenario F)"; fail=$((fail+1))
 fi
 
+echo "== scenario G: vault locks — the browser is refused, the agent is not =="
+VAULT_G="$(mktemp -d)"
+mkdir -p "$VAULT_G/_system" "$VAULT_G/relats/raw" "$VAULT_G/relats/tasks"
+printf '# frozen evidence\n' > "$VAULT_G/relats/raw/2026-09-26-evidence.md"
+printf '# a normal note\n' > "$VAULT_G/relats/tasks/work.md"
+cat > "$VAULT_G/_system/locks.json" <<'JSON'
+{ "unlock": "confirm", "locked": [ { "glob": "relats/raw/**", "reason": "Frozen evidence — ask the agent for a new snapshot." } ] }
+JSON
+DATA_DIR="$(mktemp -d)" VAULT_PATH="$VAULT_G" PORT="$PORT" HOST=127.0.0.1 node server/dist/index.js >>"$LOG" 2>&1 &
+SRV=$!
+for _ in $(seq 1 60); do curl -fsS -m 1 "$BASE/healthz" >/dev/null 2>&1 && break; sleep 0.5; done
+curl -s -c /tmp/wo-g-cookies.txt -o /dev/null -X POST "$BASE/auth/login" \
+  -H 'Content-Type: application/json' -d '{"password":"123456"}'
+
+chk "GET /api/files marks the locked note and leaves the other one editable" "True False" \
+    "$(curl -s -b /tmp/wo-g-cookies.txt "$BASE/api/files" | python3 -c "
+import json,sys
+t=json.load(sys.stdin)
+def find(n,p):
+    if n['path']==p: return n
+    for c in n.get('children',[]):
+        r=find(c,p)
+        if r: return r
+    return None
+print(*[bool(find(t,p).get('locked')) for p in ('relats/raw/2026-09-26-evidence.md','relats/tasks/work.md')])")"
+
+code="$(curl -s -o /tmp/wo-g-put.json -w '%{http_code}' -b /tmp/wo-g-cookies.txt -X PUT "$BASE/api/files/content" \
+  -H 'Content-Type: application/json' -d '{"path":"relats/raw/2026-09-26-evidence.md","content":"# tampered\n"}')"
+chk "a session write to a locked note: refused with 423 + the error name" "423 locked" \
+    "$code $(python3 -c 'import json;print(json.load(open("/tmp/wo-g-put.json")).get("error"))')"
+chk "the refused write changed nothing on disk" "# frozen evidence" \
+    "$(head -1 "$VAULT_G/relats/raw/2026-09-26-evidence.md")"
+
+code="$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/wo-g-cookies.txt -X PUT "$BASE/api/files/content" \
+  -H 'Content-Type: application/json' -H 'x-unlock-locked: 1' \
+  -d '{"path":"relats/raw/2026-09-26-evidence.md","content":"# edited on purpose\n"}')"
+chk "the unlock header opens it (confirm mode)" "200" "$code"
+
+code="$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/wo-g-cookies.txt -X PUT "$BASE/api/files/content" \
+  -H 'Content-Type: application/json' -d '{"path":"relats/tasks/work.md","content":"# mine to edit\n"}')"
+chk "an unlocked note still saves normally" "200" "$code"
+
+KEY_G="$(curl -s -b /tmp/wo-g-cookies.txt -X POST "$BASE/api/keys" -H 'Content-Type: application/json' \
+  -d '{"name":"smoke-g","scopes":["read","write"]}' | python3 -c 'import json,sys;print(json.load(sys.stdin).get("key",""))')"
+code="$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/v1/notes/relats/raw/2026-09-26-evidence.md" \
+  -H "X-API-Key: $KEY_G" -H 'Content-Type: application/json' -d '{"content":"# the agent wrote this\n"}')"
+chk "the agent's key writes the same locked note (a lock binds the browser session only)" "200" "$code"
+kill -TERM $SRV 2>/dev/null; wait $SRV 2>/dev/null
+
 echo
 echo "shutdown log (last boot):"
 grep '\[shutdown\]' "$LOG" | tail -5 | sed 's/^/  /'

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ApiError, api, type TreeNode, type ShareRecord } from './api';
+import { ApiError, api, setUnlock, type TreeNode, type ShareRecord } from './api';
 import { findNode, isFolderPath } from './tree';
 import { dateStamp, slugify, substituteTemplate, timeStamp, uniqueNotePath } from './templates';
 
@@ -117,6 +117,12 @@ interface AppState {
   goBack: () => void;
   goForward: () => void;
   content: string;
+  /** The active note is locked for this browser session — an agent-owned path from
+   *  `_system/locks.json`. Typing is refused and the editor shows why. */
+  locked: boolean;
+  lockReason: string | null;
+  /** How the vault lets a human override a lock (mirrors `_system/locks.json`). */
+  unlockMode: 'off' | 'confirm' | 'password';
   dirty: boolean;
   viewMode: ViewMode;
   setViewMode: (m: ViewMode) => void;
@@ -223,6 +229,11 @@ interface AppState {
   openWikilink: (target: string) => Promise<void>;
   closeTab: (path: string) => void;
   setContent: (c: string) => void;
+  /** Deliberately open the active locked note for editing — confirm dialog, or the operator
+   *  password when the vault's locks config asks for one. Session-scoped; the agent keeps writing. */
+  unlockLocked: (password?: string) => void;
+  /** Record that the server refused a write with 423, so the banner can explain it. */
+  markLocked: (reason: string | null) => void;
   save: () => Promise<void>;
   createNote: (path: string, body?: string) => Promise<void>;
   /** Obsidian-style: create & open a fresh "Untitled" note (no prompt). `dir` = target folder, '' = vault root. */
@@ -404,6 +415,9 @@ export const useStore = create<AppState>()(
           });
       },
       content: '',
+      locked: false,
+      lockReason: null,
+      unlockMode: 'confirm',
       dirty: false,
       viewMode: 'live',
       setViewMode: (m) => set({ viewMode: m }),
@@ -572,9 +586,17 @@ export const useStore = create<AppState>()(
         // view — never read it as a note nor pollute Recent with it.
         const isFolder = findNode(get().tree, path)?.type === 'folder';
         let content = '';
+        let locked = false;
+        let lockReason: string | null = null;
+        let unlockMode: 'off' | 'confirm' | 'password' = 'confirm';
         if (!isFolder && TEXT_RE.test(path)) {
           const r = await api.read(path);
           content = typeof r === 'string' ? r : r.content;
+          if (typeof r !== 'string') {
+            locked = !!r.locked;
+            lockReason = r.lockReason ?? null;
+            unlockMode = r.unlock ?? 'confirm';
+          }
         }
         if (request !== openRequest) return;
         // The user may have edited the previous note while this read was pending.
@@ -595,7 +617,7 @@ export const useStore = create<AppState>()(
             tabs = replace < 0 ? [...tabs, tab] : tabs.map((t, i) => i === replace ? tab : t);
           }
           const recent = isFolder ? s.recent : [path, ...s.recent.filter((p) => p !== path)].slice(0, 20);
-          return { tabs, activePath: path, content, dirty: false, recent, ...pushHistory(s, path) };
+          return { tabs, activePath: path, content, locked, lockReason, unlockMode, dirty: false, recent, ...pushHistory(s, path) };
         });
       },
 
@@ -637,8 +659,30 @@ export const useStore = create<AppState>()(
         const { activePath, content, dirty } = get();
         if (!activePath || !dirty) return;
         if (!TEXT_RE.test(activePath)) return;
-        await api.write(activePath, content);
+        try {
+          await api.write(activePath, content);
+        } catch (e) {
+          // 423 = the server's lock guard refused this session. Say so instead of "save failed".
+          if (e instanceof ApiError && e.status === 423) {
+            const reason = (e.data as { reason?: string } | undefined)?.reason ?? null;
+            set({ locked: true, lockReason: reason });
+            get().notify('Read-only note — ask the agent to change it');
+          }
+          throw e;
+        }
         set((s) => s.activePath === activePath && s.content === content ? { dirty: false } : {});
+      },
+
+      markLocked: (reason) => set({ locked: true, lockReason: reason }),
+
+      unlockLocked: (password) => {
+        const { activePath, locked, unlockMode } = get();
+        if (!activePath || !locked) return;
+        if (unlockMode === 'off') return;
+        if (unlockMode === 'password' && !password) return;
+        setUnlock({ active: true, password: unlockMode === 'password' ? password : undefined });
+        set({ locked: false, lockReason: null });
+        get().notify('Unlocked for this session — the agent still maintains this note');
       },
 
       createNote: async (path, body) => {

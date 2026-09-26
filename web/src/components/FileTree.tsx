@@ -419,6 +419,11 @@ function Node({ node, depth }: { node: TreeNode; depth: number }) {
           <Icon name="globe" size={12} className="share-globe" />
         )}
         {bookmarks.includes(node.path) && <Icon name="bookmark" size={12} className="bm-star" />}
+        {node.locked && (
+          <span className="lock-badge" title={node.lockReason ?? 'Read-only — maintained by the agent'}>
+            <Icon name="lock" size={11} />
+          </span>
+        )}
       </div>
     </div>
   );

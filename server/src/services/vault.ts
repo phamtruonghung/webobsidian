@@ -11,6 +11,10 @@ export interface TreeNode {
   mtime?: number; // last-modified (ms) — for sort-by-modified-time
   ctime?: number; // created/birth (ms) — for sort-by-created-time
   children?: TreeNode[];
+  /** Set by `services/locks.ts` on tree responses: the browser session must not edit this path. */
+  locked?: boolean;
+  /** Why it is locked — shown to the human in the editor banner. */
+  lockReason?: string;
 }
 
 /**
