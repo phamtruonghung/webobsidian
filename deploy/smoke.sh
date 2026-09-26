@@ -127,5 +127,45 @@ else
 fi
 
 echo
+echo "== vault locks (docs/LOCKS.md) =="
+# A locked note must refuse a *session* write with 423 while staying readable. The probe path is
+# derived from the vault's own `_system/locks.json` (via the tree response), so this asserts the
+# live config rather than a hardcoded path — and a refusal leaves nothing behind.
+if [[ -n "$env_pw" ]]; then
+  jar2="$(mktemp)"
+  curl -s -m 15 -c "$jar2" -o /dev/null -X POST "$BASE/auth/login" \
+    -H 'Content-Type: application/json' -d "{\"password\":\"$env_pw\"}"
+  curl -s -m 15 -b "$jar2" "$BASE/api/files" -o /tmp/wo-smoke-tree.json
+  read -r locked_dir locked_count < <(python3 -c "
+import json
+tree = json.load(open('/tmp/wo-smoke-tree.json'))
+paths = []
+def walk(n):
+    if n.get('locked'):
+        paths.append(n['path'])
+    for c in n.get('children') or []:
+        walk(c)
+walk(tree)
+print((paths[0].rsplit('/', 1)[0] if paths and '/' in paths[0] else ''), len(paths))")
+  if [[ -n "$locked_dir" ]]; then
+    probe="$locked_dir/.smoke-lock-probe.md"
+    enc="$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1], safe=''))" "$probe")"
+    code="$(curl -s -m 15 -b "$jar2" -o /tmp/wo-smoke-lock.json -w '%{http_code}' -X PUT "$BASE/api/files/content" \
+              -H 'Content-Type: application/json' -d "{\"path\":\"$probe\",\"content\":\"probe\\n\"}")"
+    err="$(python3 -c "import json;print(json.load(open('/tmp/wo-smoke-lock.json')).get('error'))" 2>/dev/null || echo unparseable)"
+    chk "a session write into a locked folder is refused with the lock error" "423 locked" "$code $err"
+    chk "the refused write created nothing on disk" "404" \
+        "$(curl -s -m 15 -b "$jar2" -o /dev/null -w '%{http_code}' "$BASE/api/files/content?path=$enc")"
+    curl -s -m 15 -b "$jar2" -o /dev/null -X DELETE "$BASE/api/files/?path=$enc" 2>/dev/null || true
+    echo "  INFO  vault locks: $locked_count path(s) locked; probed $locked_dir/"
+  else
+    echo "  SKIP  vault locks (nothing locked in this vault's _system/locks.json)"
+  fi
+  rm -f "$jar2"
+else
+  echo "  SKIP  vault locks (WEBOBSIDIAN_PASSWORD empty; UI password only)"
+fi
+
+echo
 echo "RESULT: $pass passed, $fail failed"
 exit $((fail > 0))
