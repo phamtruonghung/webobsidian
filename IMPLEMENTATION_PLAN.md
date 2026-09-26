@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-26 (FR-17 — Tạo note từ template: hết copy tay 4 bước, issue #42)
+Cập nhật lần cuối: 2026-09-26 (FR-17 — sửa lỗi chọn template: hover không chọn, click mới chọn; thư mục bắt buộc, issue #46)
 
 ---
 
@@ -633,7 +633,31 @@ Cập nhật lần cuối: 2026-09-26 (FR-17 — Tạo note từ template: hết
       đúng bundle đã kiểm chứng headless ở M38.4); `/`, `/tasks` và deep link `/note/Wiki/reviews/...` đều 200;
       vault sau deploy: 9 template + 2 meeting nguyên vẹn, lint CLEAN.
 
+## Phase 39 — Sửa lỗi Template picker: chọn bằng click, thư mục bắt buộc — FR-17 (issue #46)
+- [x] M39.1 Bỏ `onMouseEnter` khỏi hàng template (hover trước đây đặt đúng state mà click đặt, nên hover đã
+      chọn template và click trở nên vô nghĩa), bỏ template chọn sẵn, hàng chuyển thành `<button>` (click,
+      focus, Enter/Space), thêm dòng `Template:` hiển thị lựa chọn, Enter trên hàng đang focus không tạo note.
+- [x] M39.2 Thư mục **bắt buộc**: `canCreate` cần template + title + thư mục; dòng đường dẫn nói rõ lý do
+      đang chặn; `newFromTemplate` từ chối thư mục rỗng (`A target folder is required.`) → gốc vault không
+      bao giờ nhận note (trước đây `document`/`procedure`/`query`/`shift-handover` tạo được và ghi ra gốc).
+- [x] M39.3 Kiểm chứng: `npm test` **143 server + 128 web** PASS (thêm 1 test store: thư mục rỗng → từ chối,
+      không ghi gì); typecheck + build xanh; headless trên bản copy vault — mở modal **không hàng nào được
+      chọn** + Create disabled, **hover không chọn** (`data-chosen` vẫn `false`), **click chọn** (folder +
+      dòng lý do cập nhật), template không thư mục bị chặn kèm lý do, luồng meeting vẫn tạo
+      `Wiki/meetings/<date>-<slug>.md` và mở note, trùng tên → `-2`, thư mục sai → `Folder not found`,
+      **0 request lỗi, 0 pageerror**.
+
 ### Nhật ký tiến độ
+- 2026-09-26 (FR-17 — sửa lỗi chọn template, issue #46): người dùng báo "hover được vào template nhưng
+  click không chọn được". Dựng lại bằng headless: đúng — `onMouseEnter` đặt **cùng** state mà click đặt,
+  nên hover đã chọn template, còn template đầu danh sách (`abnormality`) thì được chọn sẵn; cú click không
+  còn gì để làm nên trông như chết. Nhân lúc dựng lại phát hiện lỗi nặng hơn: 4 template không suy ra được
+  thư mục (`document`, `procedure`, `query`, `shift-handover`) vẫn tạo được và **ghi note ra gốc vault**,
+  vì `canCreate` không xét thư mục và guard trong store là `if (dir && …)`. Đã sửa: hover chỉ còn hiệu ứng,
+  chọn bằng click (hàng là `<button>`, có Tab + Enter/Space), không chọn sẵn template nào, thêm dòng
+  `Template:` và dòng lý do chặn; thư mục **bắt buộc** ở cả UI và store. **Kiểm chứng**: `npm test` 143
+  server + 128 web PASS; headless xác nhận hover không chọn / click chọn / template không thư mục bị chặn /
+  luồng meeting + `-2` + thư mục sai vẫn đúng, 0 request lỗi, 0 pageerror.
 - 2026-09-26 (FR-17 — Tạo note từ template, issue #42): người dùng hỏi "khi họp tôi phải copy 1 file từ
   template sang thư mục meetings rồi sửa, có cách nào tốt hơn không". Kiểm tra trước khi trả lời: app
   **không có** tính năng template (lệnh "Open today's daily note" hardcode `Daily/<iso>.md` và không biết

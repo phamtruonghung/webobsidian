@@ -695,7 +695,10 @@ export const useStore = create<AppState>()(
         const slug = slugify(clean);
         if (!slug) throw new Error('A title is required — it names the file.');
         const dir = folder.replace(/^\/+|\/+$/g, '');
-        if (dir && !isFolderPath(get().tree, dir)) throw new Error(`Folder not found: ${dir}`);
+        // A template note with nowhere to go must not land in the vault root:
+        // the folder is part of the answer, not an optional detail.
+        if (!dir) throw new Error('A target folder is required.');
+        if (!isFolderPath(get().tree, dir)) throw new Error(`Folder not found: ${dir}`);
 
         const { content } = await api.read(templatePath);
         const now = new Date();

@@ -336,6 +336,17 @@ test('newFromTemplate refuses a title that yields no filename, and writes nothin
   assert.equal(writes.mock.calls.length, 0);
 });
 
+test('newFromTemplate refuses an empty folder — a template note never lands in the vault root', async () => {
+  useStore.setState({ tree: VAULT_TREE });
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  mock.method(api, 'read', async () => ({ content: MEETING_TEMPLATE }));
+  await assert.rejects(
+    () => state().newFromTemplate('Wiki/templates/document.md', 'QMS review', ''),
+    /target folder is required/i,
+  );
+  assert.equal(writes.mock.calls.length, 0);
+});
+
 test('newFromTemplate refuses a folder that does not exist, and writes nothing', async () => {
   useStore.setState({ tree: VAULT_TREE });
   const writes = mock.method(api, 'write', async () => ({ ok: true }));

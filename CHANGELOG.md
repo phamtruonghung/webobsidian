@@ -25,6 +25,17 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   moment you scroll, drag, tap or zoom yourself. Caught by asserting *visibility* in the headless DOM
   check, not just the line's offset (which was always "correct"). *(issue #35)*
 
+### Fixed
+- **The template picker picked on hover, so a click looked dead** — moving the mouse over a template
+  selected it (hover set the same state the click set) and the first template was pre-selected for you.
+  Choosing is now explicit: rows are buttons (click, or Tab + Enter/Space), hover is cosmetic only,
+  nothing is pre-chosen, and the form names the current choice. *(FR-17, issue #46)*
+- **A template with no folder could be created at the vault root.** `document`, `procedure`, `query`
+  and `shift-handover` resolve to no folder, and Create did not check the folder at all, so the note
+  landed in the vault root — exactly what the feature promised to refuse. Create is now blocked until
+  the template, the title *and* the folder are present (the reason is shown in place of the path), and
+  the store action refuses an empty folder outright. *(FR-17, issue #46)*
+
 ### Changed
 - **Week zoom now shows at least the next eight weeks, whatever the screen.** Pixels per day is derived
   from the chart's real width (`weekZoomPxPerDay`, clamped 4-20px/day) with 12% of the width left as
