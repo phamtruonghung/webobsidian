@@ -501,6 +501,20 @@ Rule of thumb: when a CodeMirror default looks wrong on a theme, override it wit
 variable — never with a literal colour. `web/tests/editorTheme.test.ts` enforces this for the
 caret and the panel.
 
+### Floating popups must mount inside the themed root
+
+The palette variables are declared on the `.theme-*` wrapper, **not on `<body>`** — so a popup
+appended to `<body>` is outside the subtree where `var(--text-normal)` & co. resolve. Every `var()`
+in its CSS is then invalid at computed-value time: the text falls back to black and the background
+to transparent, i.e. black-on-dark. This is what the `[[` link suggester (`lib/suggest.ts`) and the
+Properties value dropdown (`lib/livePreview.ts`) did on the Catppuccin themes, because both looked
+the wrapper up with `document.querySelector('.theme-light, .theme-dark')` — a two-class shortcut
+that misses `theme-ctp-*` (the same trap documented in `lib/cssColor.ts`).
+
+Mount through `themedPopupHost()` (`lib/theme.ts`), which matches every class in `THEME_CLASS` —
+never re-type the two-class selector. `web/tests/themeHost.test.ts` fails if the shortcut comes
+back or a mount site stops using the helper.
+
 ---
 
 ## 🔒 Security notes

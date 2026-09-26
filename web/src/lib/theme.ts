@@ -18,3 +18,26 @@ export const themeClass = (t?: string): string => THEME_CLASS[t ?? ''] ?? 'theme
 export const THEME_SELECTOR = Object.values(THEME_CLASS)
   .map((c) => '.' + c)
   .join(', ');
+
+/**
+ * The element carrying the active theme class (`theme-light`/`theme-dark`/`theme-ctp-*`),
+ * or null before the app has rendered. This is the only element the palette variables are
+ * declared on, so it is the only subtree where `var(--text-normal)` & co. resolve.
+ */
+export function themedRoot(doc: Document = document): HTMLElement | null {
+  return doc.querySelector<HTMLElement>(THEME_SELECTOR);
+}
+
+/**
+ * Where to mount a floating popup (suggester, dropdown, menu) that a user can open over the
+ * editor. It must be *inside* the themed root: a popup appended to `<body>` sits outside the
+ * element the palette variables are declared on, so every `var()` in its CSS is invalid at
+ * computed-value time and the popup renders unthemed — black text on the dark themes.
+ *
+ * Match on all of THEME_CLASS, never on `.theme-light, .theme-dark` alone: the four
+ * Catppuccin themes used to be missed by exactly that shortcut, and the lookup fell through
+ * to `<body>`. Falls back to `<body>` only when the app has not rendered yet.
+ */
+export function themedPopupHost(doc: Document = document): HTMLElement {
+  return themedRoot(doc) ?? doc.body;
+}

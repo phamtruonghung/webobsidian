@@ -1,6 +1,7 @@
 import { EditorView, ViewPlugin, ViewUpdate, keymap } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
 import { prepareQuery, fuzzySearch, fuzzySearchPath, type FuzzyMatch } from './fuzzy';
+import { themedPopupHost } from './theme';
 
 /**
  * Editor suggesters (docs §9):
@@ -142,8 +143,10 @@ class SuggestState {
     if (!this.dom) {
       this.dom = document.createElement('div');
       this.dom.className = 'suggestion-container';
-      const host = (document.querySelector('.theme-light, .theme-dark') as HTMLElement) ?? document.body;
-      host.appendChild(this.dom);
+      // Mount inside the themed root (never `<body>`): the popup's CSS reads palette
+      // variables, which are declared on that wrapper — off it, the text renders black
+      // on the dark themes (see `themedPopupHost`).
+      themedPopupHost().appendChild(this.dom);
     }
     const dom = this.dom;
     dom.textContent = '';

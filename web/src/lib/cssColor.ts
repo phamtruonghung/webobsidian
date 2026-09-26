@@ -1,4 +1,4 @@
-import { THEME_SELECTOR } from './theme';
+import { themedRoot } from './theme';
 
 /**
  * Theme-aware colour lookup for canvas/WebGL surfaces (the Graph view), where widget
@@ -53,11 +53,6 @@ export function resolveColorValue(name: string, read: ColorReader, isColor: Colo
   const value = resolveVarChain(read(name), read);
   if (!value || !isColor(value)) return null;
   return value;
-}
-
-/** The element carrying the active theme class (theme-light/-dark/theme-ctp-*), or null. */
-export function themedRoot(doc: Document = document): HTMLElement | null {
-  return doc.querySelector<HTMLElement>(THEME_SELECTOR);
 }
 
 /**
