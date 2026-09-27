@@ -7,6 +7,13 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 ## [Unreleased]
 
 ### Added
+- **The vault can hand you a file it cannot show.** A Word, Excel or PowerPoint document, an archive
+  or an RTF used to fall through to the markdown editor — which rendered its bytes as noise — and the
+  only URL that served it (`/api/files/content?path=…`) saved it as `content`, with no extension, so
+  nothing on the desktop could open the result. Those types now open a pane with the file name and a
+  **Download** button, and the server sends them as an attachment under their real name (including
+  non-ASCII names, via RFC 5987 `filename*`). Both halves come from the same seam as the PDF viewer:
+  `fileViewKind()` picks the pane, `?download=1` picks the header. *(issue #59)*
 - **PDF files open in a viewer — and `![[doc.pdf]]` embeds one inline.** A PDF in the vault used to be
   unviewable: `/note/<path>.pdf`, a click in the file tree and a wikilink all opened an *empty* editor
   tab, because the pane only knew markdown, canvases, images, audio and video. A PDF now opens as a
@@ -16,8 +23,8 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   content (`frame-ancestors 'none'` → `'self'`; third parties stay blocked), and the sanitize schema was
   *not* widened — raw note HTML still cannot inject an iframe. A link to an attachment the vault does
   not hold (`[[report.pdf]]` with a typo) now says "File not found" instead of quietly creating a note
-  named `report.pdf`. Other binaries (`.xlsx`, `.docx`, `.zip`) still fall through to the editor.
-  *(issue #57)*
+  named `report.pdf`. Other binaries (`.xlsx`, `.docx`, `.zip`) now open a **download** pane instead of the editor — see the
+  entry above. *(issue #57)*
 - **Vault locks — notes the browser cannot write.** Mark paths in `_system/locks.json` (raw evidence,
   generated boards and indexes, `_system/` itself) and a *session* write is refused with `423 locked`
   while an **API key keeps writing** — the app's two writers were already separate, so a lock is a guard

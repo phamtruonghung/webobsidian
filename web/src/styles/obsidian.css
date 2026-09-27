@@ -742,6 +742,15 @@ body.wo-col-resizing .sidebar, body.wo-col-resizing .right-sidebar { transition:
 .pdf-view { flex: 1; min-height: 0; display: flex; padding: 8px; background: var(--background-primary); }
 .pdf-view iframe.pdf-fileview { flex: 1; width: 100%; border: 0; border-radius: var(--radius-s); background: var(--background-secondary); }
 
+/* Attachment pane (FR-22): a type with no viewer offers the file itself. */
+.attachment-view { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--background-primary); }
+.attachment-card { max-width: 460px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--text-muted); }
+.attachment-card > svg { color: var(--text-accent); }
+.attachment-name { font-size: 1.05em; color: var(--text-normal); word-break: break-all; }
+.attachment-hint { margin: 0; font-size: var(--font-ui-smaller, .85em); line-height: 1.5; }
+.attachment-download { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; padding: 8px 18px; border-radius: var(--radius-s); background: var(--interactive-accent); color: var(--text-on-accent); text-decoration: none; font-weight: 600; }
+.attachment-download:hover { background: var(--interactive-accent-hover); color: var(--text-on-accent); text-decoration: none; }
+
 /* Inline `![[doc.pdf]]` embeds — Live Preview widget and the Preview pass. */
 .cm-embed-pdf, .pdf-embed-wrap { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
 .cm-embed-pdf .pdf-embed-title, .pdf-embed-wrap .pdf-embed-title { font-size: var(--font-ui-smaller, .8em); color: var(--text-muted); }

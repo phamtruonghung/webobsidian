@@ -208,6 +208,9 @@ export const api = {
     return res.json() as Promise<{ ok: true; path: string; size: number }>;
   },
   rawUrl: (path: string) => `/api/files/content?path=${encodeURIComponent(path)}`,
+  /** Same route, but the server sends it as an attachment under its own name (FR-22). */
+  downloadUrl: (path: string) =>
+    `/api/files/content?path=${encodeURIComponent(path)}&download=1`,
 
   // search & links
   // limit omitted → server returns every match (panel renders them incrementally)

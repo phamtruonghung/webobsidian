@@ -15,10 +15,15 @@ test('fileViewKind maps each extension to its pane', () => {
   assert.equal(fileViewKind('raw/assets/song.mp3'), 'audio');
   assert.equal(fileViewKind('relats/index.md'), 'text');
   assert.equal(fileViewKind('relats/daily/2026-09-27.markdown'), 'text');
-  // Not mapped (yet): a spreadsheet or an archive still falls through to the
-  // editor — a known limit recorded on the issue, not an accident.
-  assert.equal(fileViewKind('raw/documents/costs.xlsx'), 'text');
-  assert.equal(fileViewKind('raw/documents/bundle.zip'), 'text');
+  // FR-22: a document or archive the app cannot render gets a download pane.
+  assert.equal(fileViewKind('raw/documents/costs.xlsx'), 'attachment');
+  assert.equal(fileViewKind('raw/documents/bundle.zip'), 'attachment');
+  assert.equal(fileViewKind('outbox/status-report.pptx'), 'attachment');
+  assert.equal(fileViewKind('outbox/oe-report.docx'), 'attachment');
+  assert.equal(fileViewKind('outbox/legacy.rtf'), 'attachment');
+  // Still text: an unusual text format the editor can actually show.
+  assert.equal(fileViewKind('data/params.yaml'), 'text');
+  assert.equal(fileViewKind('notes/README'), 'text');
 });
 
 test('a fragment does not hide the file type', () => {

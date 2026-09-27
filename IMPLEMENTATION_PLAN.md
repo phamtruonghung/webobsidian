@@ -733,7 +733,32 @@ Cập nhật lần cuối: 2026-09-27 (Phase 43 — xem file PDF: pane xem + emb
       inline ở Live Preview và Preview, click cây file mở pane, deep link sống qua reload, không lỗi console,
       `[[documents/nope.pdf]]` không tạo note.
 
+## Phase 44 — Tải file nhị phân từ vault: pane tải + `Content-Disposition` — FR-22 (issue #59)
+- [x] M44.1 `server/src/services/mime.ts`: `attachmentDisposition(name)` — `attachment; filename="…"`
+      (fallback ASCII, escape `"`/`\`) + `filename*=UTF-8''…` (RFC 5987) cho tên không ASCII.
+- [x] M44.2 `server/src/routes/files.ts`: `?download=1` (nhận cả `download`, `download=true|yes`) ⇒ nhánh
+      nhị phân của `GET /api/files/content` gửi kèm `Content-Disposition` với basename thật của file.
+- [x] M44.3 `web/src/lib/media.ts`: `DOWNLOAD_EXT_RE` (docx/xlsx/pptx/odt/ods/odp/rtf/nén) + `FileViewKind`
+      thêm `attachment`; `extLabel()` cho câu chữ trong pane.
+- [x] M44.4 `web/src/lib/api.ts` `downloadUrl()` + `Workspace.tsx` pane tải (tên file + nút Download);
+      `Icon.tsx` thêm icon `download`; `obsidian.css` khối `.attachment-*`.
+- [x] M44.5 Test: `server/src/services/mime.test.ts` (mới, 6 case) + 5 assert mới trong
+      `web/tests/media.test.ts`; server **168 PASS**, web **149 PASS**, `npm run typecheck` 4 workspace sạch.
+- [x] M44.6 Kiểm chứng trên instance thật (LXC 107): bấm file `.pptx` trong vault ⇒ trình duyệt **tải**
+      file, tên lưu đúng `operations-documentation-system-2026-09-27.pptx`, sha256 khớp bản build
+      (`fd0aaf87…`), file là zip hợp lệ (`PK`); PDF vẫn `200 application/pdf` inline, range `206` — không
+      đổi hành vi FR-21.
+
 ### Nhật ký tiến độ
+- 2026-09-27 (Phase 44 — tải file nhị phân từ vault, FR-22, issue #59): người dùng báo "the pptx needed to
+  be downloaded from 107". Truy vết: file `.pptx` phục vụ đúng (`200`, 47.490 byte, sha256 khớp) nhưng
+  **không có đường lấy ra dùng được** — mọi loại không có viewer rơi vào editor markdown, và URL duy nhất
+  phục vụ file (`/api/files/content?path=…`) khiến trình duyệt lưu thành `content` không phần mở rộng
+  (kiểm chứng bằng Playwright: sự kiện download bắn ra, `suggested_filename = "content"`). Sửa hai đầu của
+  cùng một seam: server gửi `Content-Disposition` khi có `?download=1`, client thêm pane tải cho nhóm
+  tài liệu/nén qua `fileViewKind` (nhánh PDF của FR-21 không đổi). Kiểm chứng: server 168 PASS, web 149
+  PASS, typecheck 4 workspace sạch; Playwright (Chromium headed, Xvfb) trên vault 107 tải đúng tên file và
+  sha256 khớp bản build; PDF vẫn inline + range 206.
 - 2026-09-27 (Phase 43 — xem file PDF, FR-21, issue #57): người dùng báo "I cannot view PDF file on this
   link" cho `documents/2026-09-27-top-5-hoshin-articles-lei.pdf`. Truy vết: file phục vụ đúng
   (`application/pdf`, Range 206, sha256 khớp) — thiếu hoàn toàn **đường xem**: `EditorPane` không có nhánh

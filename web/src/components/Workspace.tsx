@@ -14,7 +14,7 @@ import { useIsMobile } from '../lib/useIsMobile';
 import { editorFind, getActiveEditor } from '../lib/activeEditor';
 import { triggerAddProperty } from '../lib/livePreview';
 import { pathToUrl } from '../lib/urlsync';
-import { fileViewKind } from '../lib/media';
+import { fileViewKind, extLabel } from '../lib/media';
 
 function EditorPane() {
   const activePath = useStore((s) => s.activePath);
@@ -54,6 +54,28 @@ function EditorPane() {
     return (
       <div className="pdf-view">
         <iframe className="pdf-fileview" src={api.rawUrl(activePath)} title={name} />
+      </div>
+    );
+  }
+  if (activePath && kind === 'attachment') {
+    // FR-22: no viewer exists for this type, and the editor would render its
+    // bytes as noise. Offer the file itself — the server sends it with a real
+    // Content-Disposition, so it saves under its own name, extension included.
+    const name = activePath.split('/').pop() ?? activePath;
+    return (
+      <div className="attachment-view">
+        <div className="attachment-card">
+          <Icon name="download" size={26} />
+          <div className="attachment-name">{name}</div>
+          <p className="attachment-hint">
+            {extLabel(name)} files open outside the vault. Download it and open it in the
+            application that made it — the vault keeps reading it where it already sits.
+          </p>
+          <a className="attachment-download" href={api.downloadUrl(activePath)}>
+            <Icon name="download" size={15} />
+            Download
+          </a>
+        </div>
       </div>
     );
   }
