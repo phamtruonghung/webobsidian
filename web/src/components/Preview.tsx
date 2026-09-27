@@ -131,6 +131,26 @@ export default function Preview({ source }: { source?: string }) {
     for (const el of root.querySelectorAll<HTMLElement>('.callout-icon[data-callout-icon]')) {
       el.innerHTML = calloutIconSvg(el.dataset.calloutIcon ?? 'default');
     }
+    // `![[doc.pdf]]` embeds: the renderer emits an inert link (rehype-sanitize drops
+    // iframes and the schema must not be widened for raw note HTML), so the frame is
+    // created here — the same pass that decorates callout icons (FR-21).
+    for (const a of root.querySelectorAll<HTMLAnchorElement>('a.pdf-embed[data-href]')) {
+      const target = a.dataset.href ?? '';
+      if (!target) continue;
+      const name = target.split('/').pop() ?? target;
+      const wrap = document.createElement('div');
+      wrap.className = 'pdf-embed-wrap';
+      const caption = document.createElement('div');
+      caption.className = 'pdf-embed-title';
+      caption.textContent = name;
+      const frame = document.createElement('iframe');
+      frame.className = 'pdf-embed-frame';
+      frame.src = api.rawUrl(target);
+      frame.loading = 'lazy';
+      frame.title = name;
+      wrap.append(caption, frame);
+      a.replaceWith(wrap);
+    }
     // Fold chevron on collapsible callouts (rotates via .is-collapsed CSS).
     for (const title of root.querySelectorAll<HTMLElement>(
       '.callout[data-callout-fold="-"] > .callout-title, .callout[data-callout-fold="+"] > .callout-title',

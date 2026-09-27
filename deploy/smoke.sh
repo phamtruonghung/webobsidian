@@ -167,5 +167,57 @@ else
 fi
 
 echo
+echo "== PDF file view (FR-21) =="
+# A PDF is served by /api/files/content and framed by the app itself. Two things can
+# silently break that: the CSP dropping back to `frame-ancestors 'none'` (the browser
+# then refuses to embed the file and the pane stays empty), and the binary branch
+# regressing to a download/octet-stream. The probe file is whatever PDF this vault
+# happens to hold, derived from the tree, and nothing is written.
+csp="$(curl -s -m 15 -D- -o /dev/null "$BASE/" | tr -d '\r' | sed -n 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //p')"
+if [[ "$csp" == *"frame-ancestors 'self'"* ]]; then
+  echo "  PASS  the app may frame its own content (CSP frame-ancestors 'self')"; pass=$((pass+1))
+else
+  echo "  FAIL  CSP does not allow self-framing — a PDF pane will stay empty (got: ${csp:0:160})"; fail=$((fail+1))
+fi
+
+if [[ -n "$env_pw" ]]; then
+  jar3="$(mktemp)"
+  curl -s -m 15 -c "$jar3" -o /dev/null -X POST "$BASE/auth/login" \
+    -H 'Content-Type: application/json' -d "{\"password\":\"$env_pw\"}"
+  curl -s -m 15 -b "$jar3" "$BASE/api/files" -o /tmp/wo-smoke-tree3.json
+  pdf="$(python3 -c "
+import json
+tree = json.load(open('/tmp/wo-smoke-tree3.json'))
+found = ''
+def walk(n):
+    global found
+    if n.get('type') == 'file' and n['path'].lower().endswith('.pdf') and not found:
+        found = n['path']
+    for c in n.get('children') or []:
+        walk(c)
+walk(tree)
+print(found)")"
+  if [[ -n "$pdf" ]]; then
+    enc_pdf="$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1], safe='/'))" "$pdf")"
+    deep="$(curl -s -m 15 -b "$jar3" -o /dev/null -w '%{http_code} %{content_type}' "$BASE/note/$enc_pdf")"
+    chk "the PDF deep link serves the SPA" "200 text/html; charset=UTF-8" "$deep"
+    read -r fcode ftype fdisp < <(curl -s -m 20 -b "$jar3" -D /tmp/wo-smoke-pdfhdr -o /tmp/wo-smoke-pdf \
+      -w '%{http_code} %{content_type}' "$BASE/api/files/content?path=$enc_pdf" \
+      | awk '{print $1, $2, "x"}')
+    disp="$(tr -d '\r' < /tmp/wo-smoke-pdfhdr | sed -n 's/^[Cc]ontent-[Dd]isposition: //p')"
+    chk "the PDF is served inline as application/pdf" "200 application/pdf|" "$fcode $ftype|$disp"
+    magic="$(head -c 5 /tmp/wo-smoke-pdf)"
+    range="$(curl -s -m 20 -b "$jar3" -r 0-4 -o /tmp/wo-smoke-range -w '%{http_code}' "$BASE/api/files/content?path=$enc_pdf")"
+    chk "a range request returns the PDF magic bytes" "206 %PDF-" "$range $(head -c 5 /tmp/wo-smoke-range)"
+    echo "  INFO  probed $pdf ($magic)"
+  else
+    echo "  SKIP  PDF file view (this vault holds no .pdf)"
+  fi
+  rm -f "$jar3"
+else
+  echo "  SKIP  PDF file view (WEBOBSIDIAN_PASSWORD empty; UI password only)"
+fi
+
+echo
 echo "RESULT: $pass passed, $fail failed"
 exit $((fail > 0))

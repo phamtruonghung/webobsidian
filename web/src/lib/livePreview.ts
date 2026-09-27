@@ -10,7 +10,8 @@ import { StateField, StateEffect, type EditorState, type Range, type Text } from
 import { syntaxTree } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { openLightbox } from './imageLightbox';
-import { VIDEO_EXT_RE, AUDIO_EXT_RE } from './media';
+import { VIDEO_EXT_RE, AUDIO_EXT_RE, PDF_EXT_RE } from './media';
+import { useStore } from './store';
 import { themedPopupHost } from './theme';
 
 /**
@@ -341,6 +342,50 @@ class MediaWidget extends WidgetType {
       embedNotFound(miss, this.alt);
     };
     wrap.appendChild(el);
+    return wrap;
+  }
+}
+
+/**
+ * Embedded PDF for `![[doc.pdf]]` (FR-21). The editor cannot inline the bytes, so
+ * the frame is the browser's own viewer, with a header that opens the file in a
+ * tab (the full-pane view in Workspace). Same-origin, so the app's CSP
+ * (`frame-src 'self'`) allows it.
+ */
+class PdfEmbedWidget extends WidgetType {
+  constructor(readonly src: string, readonly path: string) {
+    super();
+  }
+  eq(o: PdfEmbedWidget) {
+    return o.src === this.src && o.path === this.path;
+  }
+  /** Let the frame and the header button receive events instead of CodeMirror. */
+  ignoreEvent() {
+    return true;
+  }
+  toDOM() {
+    const wrap = document.createElement('div');
+    wrap.className = 'cm-embed-pdf pdf-embed';
+    const head = document.createElement('div');
+    head.className = 'pdf-embed-title';
+    const name = this.path.split('/').pop() ?? this.path;
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'pdf-embed-open';
+    open.textContent = name;
+    open.title = 'Open in a tab';
+    open.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void useStore.getState().openFile(this.path);
+    });
+    head.appendChild(open);
+    const frame = document.createElement('iframe');
+    frame.className = 'pdf-embed-frame';
+    frame.src = this.src;
+    frame.loading = 'lazy';
+    frame.title = name;
+    wrap.append(head, frame);
     return wrap;
   }
 }
@@ -2406,6 +2451,10 @@ function buildDecorations(view: EditorView): DecorationSet {
             if (sm) w = Number(sm[1]);
           }
           pushReplace(s, e, Decoration.replace({ widget: new MediaWidget(attachmentUrl(href), href, kind, w) }));
+        } else if (isEmbed && PDF_EXT_RE.test(href.split('#')[0])) {
+          // FR-21: `![[doc.pdf]]` → the browser's viewer inline, like Obsidian.
+          // The `#page=…` fragment (if any) addresses the viewer, not the file API.
+          pushReplace(s, e, Decoration.replace({ widget: new PdfEmbedWidget(attachmentUrl(href.split('#')[0]), href.split('#')[0]) }));
         } else if (isEmbed && !/\.[a-z0-9]{1,5}$/i.test(href.split('#')[0])) {
           // `![[note]]` (no binary extension) → real transclusion like Obsidian.
           pushReplace(s, e, Decoration.replace({ widget: new NoteEmbedWidget(href) }));

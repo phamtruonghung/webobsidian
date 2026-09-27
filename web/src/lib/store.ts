@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { ApiError, api, setUnlock, type TreeNode, type ShareRecord } from './api';
 import { findNode, isFolderPath } from './tree';
+import { isAttachmentTarget } from './media';
 import { dateStamp, slugify, substituteTemplate, timeStamp, uniqueNotePath } from './templates';
 
 /** Per-tab id so we can ignore the echo of our own server-pushed state change. */
@@ -629,7 +630,11 @@ export const useStore = create<AppState>()(
         try {
           const { path } = await api.resolve(target);
           if (path) await get().openFile(path);
-          else {
+          else if (isAttachmentTarget(target)) {
+            // FR-21: a picture/media/PDF target the vault does not hold is a broken
+            // link, not a new note — creating `report.pdf` for a typo pollutes the vault.
+            get().notify(`File not found: ${target}`);
+          } else {
             // Only append `.md` when the target has no extension at all — a target
             // like `Foo.canvas` must stay `Foo.canvas`, not become `Foo.canvas.md`.
             const hasExt = /\.[^./]+$/.test(target);
