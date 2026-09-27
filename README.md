@@ -136,6 +136,9 @@ scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head and merge 
 - 📝 **Editor & rendering** — CodeMirror 6 with live / source / reading views; wikilinks
   `[[note]]`, embeds `![[file]]`, tags `#tag`, callouts, task lists, KaTeX math and
   Mermaid diagrams.
+- 📕 **PDF viewer** — open a PDF from the tree or a `/note/<path>.pdf` link and it renders in the
+  pane (the browser's own viewer: pages, zoom, search, print); `![[doc.pdf]]` embeds that viewer
+  inline in a note.
 - 🕸️ **Graph view** — force-directed graph built from your wikilinks, with fly-to node
   search and highlighting.
 - 📄 **New note from template** — pick a template from your vault's `templates` folder and it is

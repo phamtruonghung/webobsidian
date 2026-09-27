@@ -369,3 +369,31 @@ test('newFromTemplate lets a failed template read through, writing nothing', asy
   );
   assert.equal(writes.mock.calls.length, 0);
 });
+
+// FR-21: a link to an attachment that is not in the vault must not write a note
+// named after the file (`x.pdf` at the vault root) — notify instead. Links to
+// notes keep the create-on-click behaviour.
+test('an unresolved attachment link creates no note', async () => {
+  mock.method(api, 'resolve', async () => ({ path: null }));
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  await state().openWikilink('missing.pdf');
+  assert.equal(writes.mock.calls.length, 0);
+  assert.deepEqual(paths(), []);
+  assert.equal(state().toast, 'File not found: missing.pdf');
+});
+
+test('an unresolved note link still offers to create it', async () => {
+  mock.method(api, 'resolve', async () => ({ path: null }));
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  await state().openWikilink('Fresh');
+  assert.equal(writes.mock.calls.length, 1);
+  assert.deepEqual(paths(), ['Fresh.md']);
+});
+
+test('a resolved pdf link opens the file itself, not a new note', async () => {
+  mock.method(api, 'resolve', async () => ({ path: 'relats/raw/documents/report.pdf' }));
+  const writes = mock.method(api, 'write', async () => ({ ok: true }));
+  await state().openWikilink('report.pdf');
+  assert.equal(writes.mock.calls.length, 0);
+  assert.deepEqual(paths(), ['relats/raw/documents/report.pdf']);
+});

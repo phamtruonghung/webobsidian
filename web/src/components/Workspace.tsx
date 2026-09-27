@@ -14,21 +14,17 @@ import { useIsMobile } from '../lib/useIsMobile';
 import { editorFind, getActiveEditor } from '../lib/activeEditor';
 import { triggerAddProperty } from '../lib/livePreview';
 import { pathToUrl } from '../lib/urlsync';
-import { VIDEO_EXT_RE, AUDIO_EXT_RE } from '../lib/media';
+import { fileViewKind } from '../lib/media';
 
 function EditorPane() {
   const activePath = useStore((s) => s.activePath);
   const viewMode = useStore((s) => s.viewMode);
-  const isMd = activePath ? /\.(md|markdown)$/i.test(activePath) : false;
-  const isImage = activePath ? /\.(png|jpe?g|gif|svg|webp)$/i.test(activePath) : false;
-  const isCanvas = activePath ? /\.canvas$/i.test(activePath) : false;
-  const isVideo = activePath ? VIDEO_EXT_RE.test(activePath) : false;
-  const isAudio = activePath ? AUDIO_EXT_RE.test(activePath) : false;
+  const kind = activePath ? fileViewKind(activePath) : 'text';
 
-  if (activePath && isCanvas) {
+  if (activePath && kind === 'canvas') {
     return <CanvasView />;
   }
-  if (activePath && isImage) {
+  if (activePath && kind === 'image') {
     return (
       <div className="markdown-preview">
         <div className="preview-inner">
@@ -37,11 +33,11 @@ function EditorPane() {
       </div>
     );
   }
-  if (activePath && (isVideo || isAudio)) {
+  if (activePath && (kind === 'video' || kind === 'audio')) {
     return (
       <div className="markdown-preview">
         <div className="preview-inner">
-          {isVideo ? (
+          {kind === 'video' ? (
             <video className="media-embed media-fileview" src={api.rawUrl(activePath)} controls preload="metadata" />
           ) : (
             <audio className="media-embed media-fileview" src={api.rawUrl(activePath)} controls preload="metadata" />
@@ -50,8 +46,18 @@ function EditorPane() {
       </div>
     );
   }
+  if (activePath && kind === 'pdf') {
+    // FR-21: a PDF has no text body to edit, so it opens in the browser's own
+    // viewer instead of an empty markdown pane. Same-origin, so the app's CSP
+    // (`frame-src 'self'`) already allows the frame.
+    const name = activePath.split('/').pop() ?? activePath;
+    return (
+      <div className="pdf-view">
+        <iframe className="pdf-fileview" src={api.rawUrl(activePath)} title={name} />
+      </div>
+    );
+  }
   // Reading mode = the same Live Preview editor in read-only (identical render).
-  void isMd;
   void viewMode;
   return <Editor />;
 }

@@ -101,7 +101,11 @@ async function main() {
           frameSrc: ["'self'", 'blob:'],
           baseUri: ["'self'"],
           formAction: ["'self'"],
-          frameAncestors: ["'none'"],
+          // The app frames its own content — `![[doc.pdf]]` and the PDF file view load
+          // `/api/files/content` in an iframe (FR-21). 'none' blocks the browser's
+          // viewer with "Framing … violates frame-ancestors 'none'" and leaves an empty
+          // pane; 'self' keeps every third party out, matching frame-src above.
+          frameAncestors: ["'self'"],
           upgradeInsecureRequests: null,
         },
       },
