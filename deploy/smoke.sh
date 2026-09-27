@@ -219,5 +219,50 @@ else
 fi
 
 echo
+echo "== Binary download (FR-22) =="
+# A file with no viewer has to come out under its own name: without the header the
+# browser names it after the last URL segment and saves `content`, with no extension,
+# which no desktop application can open. The same route must still serve inline when
+# nothing asks for a download — that is what the PDF pane depends on.
+if [[ -n "$env_pw" ]]; then
+  jar4="$(mktemp)"
+  curl -s -m 15 -c "$jar4" -o /dev/null -X POST "$BASE/auth/login" \
+    -H 'Content-Type: application/json' -d "{\"password\":\"$env_pw\"}"
+  curl -s -m 15 -b "$jar4" "$BASE/api/files" -o /tmp/wo-smoke-tree4.json
+  binary="$(python3 -c "
+import json
+tree = json.load(open('/tmp/wo-smoke-tree4.json'))
+found = ''
+def walk(n):
+    global found
+    if n.get('type') == 'file' and not found and n['path'].lower().endswith(('.pptx', '.docx', '.xlsx', '.zip')):
+        found = n['path']
+    for c in n.get('children') or []:
+        walk(c)
+walk(tree)
+print(found)")"
+  if [[ -n "$binary" ]]; then
+    enc_bin="$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1], safe='/'))" "$binary")"
+    base_name="$(basename "$binary")"
+    dcode="$(curl -s -m 20 -b "$jar4" -D /tmp/wo-smoke-dlhdr -o /tmp/wo-smoke-dl \
+      -w '%{http_code}' "$BASE/api/files/content?path=$enc_bin&download=1")"
+    ddisp="$(tr -d '\r' < /tmp/wo-smoke-dlhdr | sed -n 's/^[Cc]ontent-[Dd]isposition: //p')"
+    chk "?download=1 answers 200" "200" "$dcode"
+    chk "?download=1 names the file, extension included" \
+      "attachment; filename=\"$base_name\"" "$(printf '%s' "$ddisp" | cut -d';' -f1,2)"
+    chk "the download is the real office/zip container" "PK" "$(head -c 2 /tmp/wo-smoke-dl)"
+    idisp="$(curl -s -m 20 -b "$jar4" -D - -o /dev/null "$BASE/api/files/content?path=$enc_bin" \
+      | tr -d '\r' | sed -n 's/^[Cc]ontent-[Dd]isposition: //p')"
+    chk "without ?download it still serves inline" "" "$idisp"
+    echo "  INFO  probed $binary"
+  else
+    echo "  SKIP  binary download (this vault holds no office/zip file)"
+  fi
+  rm -f "$jar4"
+else
+  echo "  SKIP  binary download (WEBOBSIDIAN_PASSWORD empty; UI password only)"
+fi
+
+echo
 echo "RESULT: $pass passed, $fail failed"
 exit $((fail > 0))

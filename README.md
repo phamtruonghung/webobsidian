@@ -139,6 +139,9 @@ scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head and merge 
 - 📕 **PDF viewer** — open a PDF from the tree or a `/note/<path>.pdf` link and it renders in the
   pane (the browser's own viewer: pages, zoom, search, print); `![[doc.pdf]]` embeds that viewer
   inline in a note.
+- 📥 **Download the vault's binaries** — a Word/Excel/PowerPoint file, an archive, an RTF: types with
+  no in-app viewer open a pane with a **Download** button and save under their own name (extension
+  included), instead of landing in the editor as binary noise or saving as `content`.
 - 🕸️ **Graph view** — force-directed graph built from your wikilinks, with fly-to node
   search and highlighting.
 - 📄 **New note from template** — pick a template from your vault's `templates` folder and it is

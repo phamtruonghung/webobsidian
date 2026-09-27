@@ -1,7 +1,14 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.21 · Cập nhật: 2026-09-27 · Trạng thái: Draft
+> Phiên bản: 1.22 · Cập nhật: 2026-09-27 · Trạng thái: Draft
+> Changelog 1.22 (FR-22 — tải file nhị phân từ vault: pane tải + `Content-Disposition`, issue #59): file
+> Word/Excel/PowerPoint nằm trong vault nhưng **không lấy ra được**: mọi định dạng không có viewer rơi vào
+> editor markdown (hiện byte nhị phân) và URL duy nhất phục vụ file
+> (`GET /api/files/content?path=…`) được trình duyệt lưu thành `content` **không có phần mở rộng**, nên không
+> ứng dụng nào mở được. Thêm `?download=1` (server gửi `Content-Disposition: attachment` kèm tên file thật,
+> có `filename*` RFC 5987 cho tên không ASCII) và `fileViewKind()` trả `attachment` cho nhóm tài liệu/nén
+> (`DOWNLOAD_EXT_RE`) ⇒ pane tải với tên file + nút **Download**.
 > Changelog 1.21 (FR-21 — xem file PDF: pane xem + embed `![[x.pdf]]`, issue #57): PDF nằm trong vault
 > nhưng **không xem được ở đâu**: `EditorPane` chỉ có nhánh `.md`/canvas/ảnh/video/audio nên mọi đường vào
 > (`/note/<path>.pdf`, click trong cây file, wikilink) đều mở một tab editor trống, dù
@@ -909,8 +916,8 @@ editor trống.
   note mới cho **mọi** target có phần mở rộng chưa giải được, nên gõ sai `[[report.pdf]]` sinh file
   `report.pdf` ở gốc vault. Nay target thuộc nhóm file đính kèm (`isAttachmentTarget()`: ảnh/media/pdf) chỉ
   báo `File not found: …`; wikilink tới note vẫn tạo như cũ.
-- **Giới hạn đã biết (ngoài phạm vi)**: các định dạng nhị phân khác (`.xlsx`, `.docx`, `.zip`) vẫn rơi vào
-  editor trống — chúng dùng cùng seam `fileViewKind` khi cần.
+- **Giới hạn đã biết (đã xử lý ở FR-22)**: các định dạng nhị phân khác (`.xlsx`, `.docx`, `.zip`) trước đây
+  rơi vào editor trống; từ FR-22 chúng mở **pane tải** trên cùng seam `fileViewKind`.
 - **Kiểm chứng**: `npm test` **148 PASS** (thêm `web/tests/media.test.ts`, `web/tests/markdown.test.ts` và 3
   assert trong `web/tests/store.test.ts`); Chromium có trình xem PDF (Xvfb, headed) trên **bản sao** vault:
   deep link hiện đúng trang PDF trong pane (ảnh chụp có tiêu đề/mục lục), `![[x.pdf]]` render inline ở Live
@@ -918,6 +925,32 @@ editor trống.
   không lỗi console/pageerror, và `[[documents/nope.pdf]]` không tạo note nào; `deploy/smoke.sh` **13/13
   PASS** trên instance local (thêm 4 assert: CSP `frame-ancestors 'self'`, deep link SPA, file trả
   `application/pdf` inline, range `206 %PDF-`).
+
+### FR-22 · Tải file nhị phân từ vault: pane tải + `Content-Disposition` (issue #59)
+Mục tiêu: file **không có viewer** (Word/Excel/PowerPoint, nén, RTF) nằm trong vault nhưng **không lấy ra
+dùng được** — mở thì ra editor markdown toàn byte nhị phân, mà tải thì mất tên file.
+
+- **FR-22.1 · `?download=1` trên `GET /api/files/content`** (`server/src/routes/files.ts`): nhánh nhị phân
+  (không phải text) nhận thêm `?download` / `?download=1|true|yes` và gửi
+  `Content-Disposition: attachment; filename="<basename>"; filename*=UTF-8''<percent-encoded>`.
+  Không có header này, trình duyệt đặt tên file theo segment cuối của URL ⇒ mọi file tải về đều tên
+  `content` **không phần mở rộng** (đo được bằng Playwright: `suggested_filename = "content"`).
+  Request không có `?download` giữ nguyên hành vi của FR-21: PDF vẫn `inline`, `Accept-Ranges: bytes`,
+  range `206` — `Content-Disposition` chỉ được thêm khi được hỏi.
+- **FR-22.2 · `attachmentDisposition()`** (`server/src/services/mime.ts`): dựng header, lấy basename từ
+  đường dẫn, thay ký tự ngoài ASCII bằng `_` cho `filename` (fallback an toàn) và escape `"`/`\` để không
+  cắt header; tên thật đi ở `filename*` theo RFC 5987 nên tên tiếng Việt vẫn giữ đúng khi lưu.
+- **FR-22.3 · `fileViewKind()` trả `attachment`** (`web/src/lib/media.ts`): thêm `DOWNLOAD_EXT_RE`
+  (`docx|xlsx|pptx|odt|ods|odp|rtf|zip|7z|tar|gz|tgz|bz2|xz`). Định dạng không nằm trong danh sách vẫn về
+  `text` như cũ. `extLabel()` cho câu chữ trong pane ("PowerPoint files open outside the vault…").
+- **FR-22.4 · Pane tải** (`web/src/components/Workspace.tsx`): nhánh `attachment` hiện tên file + nút
+  **Download** trỏ `api.downloadUrl(path)`; icon `download` thêm vào `Icon.tsx`; style `.attachment-*`
+  trong `obsidian.css`.
+- **FR-22.5 · Kiểm chứng**: `npm run typecheck` 4 workspace sạch; `npm test` server **168 PASS**, web
+  **149 PASS** (`server/src/services/mime.test.ts` mới + 5 assert trong `web/tests/media.test.ts`);
+  Playwright (Chromium headed, Xvfb) trên instance thật LXC 107: mở file `.pptx` trong vault ⇒ trình duyệt
+  tải file, tên lưu `operations-documentation-system-2026-09-27.pptx`, sha256 khớp bản build
+  (`fd0aaf87…`), nội dung là zip hợp lệ (`PK`); PDF giữ `200 application/pdf` inline + range `206`.
 
 ## 4. Yêu cầu phi chức năng (NFR)
 - **Bảo mật**: password hash scrypt, JWT secret tự sinh, API key hash khi lưu, path traversal guard

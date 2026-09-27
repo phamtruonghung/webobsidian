@@ -10,7 +10,7 @@ import { updateLinkGraphForFile } from '../services/links.js';
 import { scheduleAutoCommitOnSave } from '../services/git.js';
 import { resolveFile } from '../services/fileindex.js';
 import { onFileRenamed } from '../services/shares.js';
-import { mimeFor } from '../services/mime.js';
+import { mimeFor, attachmentDisposition } from '../services/mime.js';
 import { sendFileWithRange } from '../services/httpfile.js';
 import { contentVersion, checkVersion } from '../services/noteversion.js';
 import { annotateTree, loadLocks, lockFor, sessionMayWrite, targetsOf } from '../services/locks.js';
@@ -51,6 +51,12 @@ function reindex(opts: { upsert?: string; added?: string; removed?: string } = {
   if (opts.added && isMd(opts.added)) void updateLinkGraphForFile(opts.added).catch(() => {});
   if (opts.removed && isMd(opts.removed)) void updateLinkGraphForFile(opts.removed, true).catch(() => {});
   scheduleAutoCommitOnSave();
+}
+
+/** `?download`, `?download=1`, `?download=true` (FR-22). */
+function wantsDownload(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(wantsDownload);
+  return value === '' || value === '1' || value === 'true' || value === 'yes';
 }
 
 filesRouter.get(
@@ -99,7 +105,14 @@ filesRouter.get(
     } else {
       // Stream with Range support so embedded <video>/<audio> can seek.
       const abs = await vault.resolveInVault(rel);
-      await sendFileWithRange(req, res, abs, mimeFor(rel));
+      const headers: Record<string, string> = {};
+      // `?download=1` (FR-22): save it under its own name instead of letting the
+      // browser name it after the URL — `/api/files/content?path=…` otherwise
+      // lands as `content`, with no extension, and nothing can open it.
+      if (wantsDownload(req.query.download)) {
+        headers['Content-Disposition'] = attachmentDisposition(path.posix.basename(rel));
+      }
+      await sendFileWithRange(req, res, abs, mimeFor(rel), headers);
     }
   }),
 );
