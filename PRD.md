@@ -1,7 +1,16 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.20 · Cập nhật: 2026-09-26 · Trạng thái: Draft
+> Phiên bản: 1.21 · Cập nhật: 2026-09-27 · Trạng thái: Draft
+> Changelog 1.21 (FR-21 — xem file PDF: pane xem + embed `![[x.pdf]]`, issue #57): PDF nằm trong vault
+> nhưng **không xem được ở đâu**: `EditorPane` chỉ có nhánh `.md`/canvas/ảnh/video/audio nên mọi đường vào
+> (`/note/<path>.pdf`, click trong cây file, wikilink) đều mở một tab editor trống, dù
+> `GET /api/files/content` đã phục vụ file đúng. Thêm `fileViewKind()` (`lib/media.ts`) làm một nguồn duy
+> nhất cho cả ba đường render, pane PDF là iframe trỏ vào chính endpoint file (trình xem của trình duyệt lo
+> phân trang/zoom/tìm/in); `![[x.pdf]]` render inline ở Live Preview (widget) và ở Reading/Preview (link trơ
+> mang `data-href`, pass post-render thay bằng iframe — schema sanitize **không** nới); CSP đổi
+> `frame-ancestors 'none'` → `'self'` vì chính app khung nội dung của mình; link tới file đính kèm không
+> tồn tại không còn sinh note rác (`report.pdf`).
 > Changelog 1.20 (FR-20 — hai lỗi đường dẫn: note không tồn tại trả 500 thay vì 404; lệnh daily note
 > ghi ra `Daily/<iso>.md` ở gốc vault bất kể vault đặt thư mục daily ở đâu, issue #52 và #55): lỗi 404
 > do `GET /api/files/content` giải đường dẫn theo basename (cho embed `![[image.png]]`) rồi vẫn đọc tiếp
@@ -329,6 +338,8 @@ webobsidian/
   oga/opus`. `![[clip.mp4|W]]` đặt chiều rộng video. Mở thẳng file media từ file tree → hiện player.
   Binary serve qua HTTP Range (206) để seek/Safari hoạt động; MIME + extension: `services/mime.ts` /
   `lib/media.ts`.
+- **PDF**: `![[doc.pdf]]` → khung trình xem PDF (Live Preview, Reading/Preview); mở thẳng file từ file tree
+  hoặc deep link `/note/<path>.pdf` → pane xem PDF toàn khung. Chi tiết: FR-21.
 - Backlinks panel, outline, tag pane.
 - Right sidebar dạng **tab strip icon** (giống Obsidian): Backlinks · Outgoing links · Tags · Outline.
   - Backlinks: "Linked mentions" (đếm + danh sách) **và** "Unlinked mentions" (note nhắc tên note hiện tại
@@ -872,6 +883,42 @@ Mục tiêu: cùng một chỗ — không phân biệt được "không có file
   FR-20.1) — 10/10 PASS, gồm cả hai assert mới của khoá; `npm test` và `scripts/smoke-test.sh` (31 PASS)
   sạch; `docs/DEPLOYMENT.md` ghi thứ tự giải đường dẫn daily note.
 
+### FR-21 · Xem file PDF: pane xem + embed `![[x.pdf]]` (issue #57)
+Mục tiêu: file PDF nằm trong vault nhưng **không xem được ở đâu cả** — mọi đường vào đều dẫn tới một tab
+editor trống.
+
+- **FR-21.1 · Pane xem PDF**: `EditorPane` (`web/src/components/Workspace.tsx`) chỉ có nhánh cho `.md`,
+  canvas, ảnh, video, audio — mọi thứ khác rơi vào editor markdown, mà `store.openFile` chỉ đọc nội dung cho
+  `TEXT_RE` (`md|markdown|txt|json|csv|canvas|css|js|ya?ml`), nên `/note/<path>.pdf` (deep link, click
+  trong cây file, click wikilink) mở tab trống tên file dù `GET /api/files/content` đã phục vụ file đúng
+  (`application/pdf`, có `Accept-Ranges`). Sửa: `fileViewKind()` trong `web/src/lib/media.ts`
+  (`canvas|image|video|audio|pdf|text`) là **một** nguồn cho cả ba đường render; pane PDF là
+  `<iframe class="pdf-fileview">` trỏ vào chính endpoint file — trình xem PDF của trình duyệt lo phân
+  trang/zoom/tìm kiếm/in.
+- **FR-21.2 · Embed `![[x.pdf]]`**: Live Preview render `PdfEmbedWidget` (khung + tên file bấm được để mở
+  thành tab); Reading/Preview: `markdown.ts` phát ra **link trơ** mang `data-href` (href là URL file thật,
+  nên renderer không chạy pass đó — vd trang public share — vẫn có link dùng được), rồi pass post-render của
+  `Preview.tsx` (cùng pass với icon callout) thay bằng iframe. **Schema rehype-sanitize không được nới**:
+  HTML thô trong note không có quyền chèn iframe (đúng lý do ```html block chỉ render trong khung sandbox
+  khi người dùng bấm). `expandEmbeds` bỏ qua PDF để không nhồi byte của file vào markdown.
+- **FR-21.3 · CSP `frame-ancestors`**: `'none'` → `'self'` (`server/src/index.ts`). Chính app khung nội
+  dung của mình (`frameSrc`/`imgSrc` đã là `'self'`), nhưng `frame-ancestors 'none'` khiến trình duyệt từ
+  chối nhúng file (log console `Framing … violates frame-ancestors 'none'`) và pane trống; `'self'` vẫn
+  chặn mọi site khác.
+- **FR-21.4 · Link tới file đính kèm không tồn tại không sinh note**: `store.openWikilink` trước đây tạo
+  note mới cho **mọi** target có phần mở rộng chưa giải được, nên gõ sai `[[report.pdf]]` sinh file
+  `report.pdf` ở gốc vault. Nay target thuộc nhóm file đính kèm (`isAttachmentTarget()`: ảnh/media/pdf) chỉ
+  báo `File not found: …`; wikilink tới note vẫn tạo như cũ.
+- **Giới hạn đã biết (ngoài phạm vi)**: các định dạng nhị phân khác (`.xlsx`, `.docx`, `.zip`) vẫn rơi vào
+  editor trống — chúng dùng cùng seam `fileViewKind` khi cần.
+- **Kiểm chứng**: `npm test` **148 PASS** (thêm `web/tests/media.test.ts`, `web/tests/markdown.test.ts` và 3
+  assert trong `web/tests/store.test.ts`); Chromium có trình xem PDF (Xvfb, headed) trên **bản sao** vault:
+  deep link hiện đúng trang PDF trong pane (ảnh chụp có tiêu đề/mục lục), `![[x.pdf]]` render inline ở Live
+  Preview và ở Preview (split pane), click tên file trong cây mở pane PDF, deep link sống qua `reload`,
+  không lỗi console/pageerror, và `[[documents/nope.pdf]]` không tạo note nào; `deploy/smoke.sh` **13/13
+  PASS** trên instance local (thêm 4 assert: CSP `frame-ancestors 'self'`, deep link SPA, file trả
+  `application/pdf` inline, range `206 %PDF-`).
+
 ## 4. Yêu cầu phi chức năng (NFR)
 - **Bảo mật**: password hash scrypt, JWT secret tự sinh, API key hash khi lưu, path traversal guard
   (chặn `..`, segment `.git`, symlink thoát vault — trừ khi realpath đích nằm trong `vault.allowedRoots`),
@@ -885,7 +932,7 @@ Mục tiêu: cùng một chỗ — không phân biệt được "không có file
   var); only then is changing it mandatory right after the first login (`mustChangePassword`). That flag
   is **not** returned by `GET /auth/status` (an unauthenticated route), so it cannot be used to discover
   which instances still accept the default; clients read it from `/auth/login` and `/auth/me`. Security headers qua `helmet` + CSP (script-src 'self'+nonce; không ép HTTPS
-  để giữ self-host HTTP). Token git/PAT được redact khỏi mọi thông báo lỗi trả client + log. WebSocket
+  để giữ self-host HTTP; `frame-ancestors 'self'` để app tự nhúng file của mình — FR-21.3). Token git/PAT được redact khỏi mọi thông báo lỗi trả client + log. WebSocket
   `/ws` yêu cầu phiên đăng nhập hợp lệ. Plugin `id` được validate trước khi thành path segment; đổi
   `vault.path` qua API bị giới hạn trong `allowedRoots`.
 - **Hiệu năng**: search < 100ms cho vault ~10k notes; lazy load file tree lớn. Asset build có hash

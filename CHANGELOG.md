@@ -7,6 +7,17 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 ## [Unreleased]
 
 ### Added
+- **PDF files open in a viewer — and `![[doc.pdf]]` embeds one inline.** A PDF in the vault used to be
+  unviewable: `/note/<path>.pdf`, a click in the file tree and a wikilink all opened an *empty* editor
+  tab, because the pane only knew markdown, canvases, images, audio and video. A PDF now opens as a
+  full-pane frame served by the browser's own viewer (pages, zoom, search, print), and `![[doc.pdf]]`
+  renders that same viewer inline in Live Preview and in the Reading/split preview, with the file name
+  as a link that opens it as a tab. Rendering the frame required the app's CSP to allow framing its own
+  content (`frame-ancestors 'none'` → `'self'`; third parties stay blocked), and the sanitize schema was
+  *not* widened — raw note HTML still cannot inject an iframe. A link to an attachment the vault does
+  not hold (`[[report.pdf]]` with a typo) now says "File not found" instead of quietly creating a note
+  named `report.pdf`. Other binaries (`.xlsx`, `.docx`, `.zip`) still fall through to the editor.
+  *(issue #57)*
 - **Vault locks — notes the browser cannot write.** Mark paths in `_system/locks.json` (raw evidence,
   generated boards and indexes, `_system/` itself) and a *session* write is refused with `423 locked`
   while an **API key keeps writing** — the app's two writers were already separate, so a lock is a guard

@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-26 (Phase 42 — hai lỗi đường dẫn: note không tồn tại trả 500, daily note về sai thư mục — FR-20, issue #52 và #55)
+Cập nhật lần cuối: 2026-09-27 (Phase 43 — xem file PDF: pane xem + embed `![[x.pdf]]` — FR-21, issue #57)
 
 ---
 
@@ -711,7 +711,39 @@ Cập nhật lần cuối: 2026-09-26 (Phase 42 — hai lỗi đường dẫn: n
 - [x] M42.4 Kiểm chứng: `npm test` sạch; `scripts/smoke-test.sh` **31 PASS** (thêm assert `404 not_found`);
       deploy `b7233be` live, `deploy/smoke.sh` **10/10 PASS**; vault thật `wiki_lint` CLEAN sau khi adopt.
 
+## Phase 43 — Xem file PDF: pane xem + embed `![[x.pdf]]` — FR-21 (issue #57)
+- [x] M43.1 `web/src/lib/media.ts`: `fileViewKind()` (`canvas|image|video|audio|pdf|text`), `PDF_EXT_RE`,
+      `IMAGE_EXT_RE`, `isAttachmentTarget()` — một nguồn cho file view, Reading/Preview và Live Preview.
+- [x] M43.2 `Workspace.tsx`: pane PDF (`iframe.pdf-fileview` → `/api/files/content?path=…`) cho deep link,
+      click trong cây file và wikilink; `EditorPane` dùng `fileViewKind()` thay các regex rời.
+- [x] M43.3 `livePreview.ts`: `PdfEmbedWidget` cho `![[doc.pdf]]` (khung + tên file mở thành tab;
+      `#page=…` không lọt vào query của file API).
+- [x] M43.4 `markdown.ts` + `Preview.tsx`: link trơ `a.pdf-embed[data-href]` (href = URL file thật) rồi thay
+      bằng iframe trong pass post-render — **không** nới schema rehype-sanitize; `expandEmbeds` bỏ qua PDF.
+- [x] M43.5 `server/src/index.ts`: CSP `frame-ancestors 'none'` → `'self'` (app khung nội dung của chính nó;
+      trước đó trình duyệt chặn khung và pane trống).
+- [x] M43.6 `store.openWikilink`: target file đính kèm (ảnh/media/pdf) chưa giải được ⇒ `File not found: …`,
+      không sinh note `report.pdf`.
+- [x] M43.7 Test: `web/tests/media.test.ts`, `web/tests/markdown.test.ts` (mới) + 3 assert trong
+      `store.test.ts`; `npm test` 148 PASS.
+- [x] M43.8 `deploy/smoke.sh`: 4 assert mới (CSP `frame-ancestors 'self'`, deep link PDF trả SPA,
+      `application/pdf` không `Content-Disposition`, range `206 %PDF-`) — chạy theo đường dẫn PDF tìm trong
+      cây, không ghi gì; local 13/13 PASS.
+- [x] M43.9 Kiểm chứng UI (bản sao vault, Chromium headed dưới Xvfb): deep link hiện đúng trang PDF, embed
+      inline ở Live Preview và Preview, click cây file mở pane, deep link sống qua reload, không lỗi console,
+      `[[documents/nope.pdf]]` không tạo note.
+
 ### Nhật ký tiến độ
+- 2026-09-27 (Phase 43 — xem file PDF, FR-21, issue #57): người dùng báo "I cannot view PDF file on this
+  link" cho `documents/2026-09-27-top-5-hoshin-articles-lei.pdf`. Truy vết: file phục vụ đúng
+  (`application/pdf`, Range 206, sha256 khớp) — thiếu hoàn toàn **đường xem**: `EditorPane` không có nhánh
+  PDF nên deep link/click cây file mở tab editor trống. Thêm `fileViewKind()` làm một nguồn cho cả ba đường
+  render, pane PDF là iframe; `![[x.pdf]]` render inline ở Live Preview và ở Preview (link trơ + pass
+  post-render, schema sanitize không nới). Kiểm tra headless phát hiện thêm lỗi thật: CSP
+  `frame-ancestors 'none'` khiến trình duyệt từ chối khung chính app (`Framing … violates frame-ancestors
+  'none'`) ⇒ đổi sang `'self'`. Nhân đây bịt lỗi gõ sai link file đính kèm sinh note rác. Kiểm chứng:
+  `npm test` 148 PASS; Chromium headed (Xvfb) trên bản sao vault thấy đúng trang PDF cả ở pane và ở embed;
+  `deploy/smoke.sh` 13/13 PASS (thêm assert CSP + file PDF).
 - 2026-09-26 (Phase 42 — hai lỗi đường dẫn, FR-20): assert mới của Phase 41 trên container thật bắt được
   `GET /api/files/content` trả **500** khi note không tồn tại (route giải basename rồi vẫn đọc tiếp ⇒ ENOENT
   thành 500); deploy đã tự rollback nên không lộ ra ngoài. Thêm nhánh `404 not_found` sau bước giải
