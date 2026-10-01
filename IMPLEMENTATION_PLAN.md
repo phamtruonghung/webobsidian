@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-27 (Phase 43 — xem file PDF: pane xem + embed `![[x.pdf]]` — FR-21, issue #57)
+Cập nhật lần cuối: 2026-09-30 (Phase 45 — danh sách giá trị cho thuộc tính đóng: nút ▾ cạnh `status`/`priority`/… — FR-23, issue #61)
 
 ---
 
@@ -749,7 +749,61 @@ Cập nhật lần cuối: 2026-09-27 (Phase 43 — xem file PDF: pane xem + emb
       (`fd0aaf87…`), file là zip hợp lệ (`PK`); PDF vẫn `200 application/pdf` inline, range `206` — không
       đổi hành vi FR-21.
 
+## Phase 45 — Danh sách giá trị cho thuộc tính đóng: nút ▾ + list (`status`/`priority`/…) — FR-23 (issue #61)
+- [x] M45.1 `web/src/lib/propOptions.ts` (mới, thuần logic, không phụ thuộc DOM): bảng `PROP_PICK_LISTS`
+      theo từ vựng của `relats/SCHEMA.md` — `priority` (P1–P3), `origin`, `confidence`, `severity`; riêng
+      `status` **theo loại trang** (`STATUS_BY_TYPE`): `task` (open / in-progress / waiting / blocked /
+      done / dropped), `abnormality` (open / contained / countermeasure-agreed / verified / closed),
+      `document` (open / acted / archived) — status của task **không phải** status của abnormality, nên
+      loại trang không có từ vựng (`system`, `entity`, …) thì **không** hiện picker thay vì hiện sai danh
+      sách. `hasPickList(key, type)` / `pickListFor(key, type)` (khớp key sau khi trim và bỏ hoa-thường)
+      và `optionsFor(key, current, type)` trả option kèm cờ `current` / `offList`. **Giá trị lạ luôn được
+      giữ nguyên, đứng đầu danh sách và gắn cờ**; giá trị rỗng không thêm option nào (xoá là việc của nút
+      × của hàng).
+- [x] M45.2 `web/src/lib/livePreview.ts`: `makeScalarField(dt, value, key, type)` nhận thêm `key` và
+      loại trang (`pageKind()`, đọc từ chính YAML của block) để chọn đúng từ vựng status; nhánh text
+      của khoá có pick-list bọc field trong `.prop-val-wrap` và thêm nút `.prop-pick-btn` (`▾`,
+      `aria-haspopup="listbox"`); `openPickList()` mount list vào **`themedPopupHost()`** bằng đúng các
+      class sẵn có (`.cm-props-dropdown.prop-val-dropdown`, `.cm-props-dd-item`) nên palette của theme
+      resolve, chọn xong ghi qua `mutate()` — đúng **một** dòng frontmatter đổi; Escape và click ra
+      ngoài đóng list. `setType` dựng lại cả ô giá trị thay vì `replaceChild` vào field (field có thể
+      nằm trong wrapper).
+- [x] M45.3 `web/src/styles/obsidian.css`: `.prop-val-wrap`, `.prop-pick-btn` (+ hover/focus) và nhãn
+      `current` cho option off-list.
+- [x] M45.4 Không đụng phần còn lại: `lib/tasks.ts` (id canonical + alias của board) và menu *Property
+      type* giữ nguyên; không thêm tham số server/index nào — từ vựng nằm trong code client, app chỉ
+      ghi lại giá trị người dùng chọn.
+- [x] M45.5 Test: `web/tests/propOptions.test.ts` (mới, 10 case: từ vựng đúng và đúng thứ tự, không
+      trùng giá trị, key không có list, khớp key/loại trang không phân biệt hoa-thường/khoảng trắng, giá
+      trị đang dùng được đánh dấu, **giá trị lạ giữ nguyên và đứng đầu**, giá trị rỗng, `status` theo loại
+      trang — `abnormality`/`document` có danh sách riêng, `system`/`entity`/không type thì không có, và
+      cùng một chuỗi (`countermeasure-agreed`) là off-list trên task nhưng canonical trên abnormality).
+      `npm run typecheck` 4 workspace sạch; `npm test` server **168 PASS**, web **159 PASS** (thêm 10 case).
+- [x] M45.6 Kiểm chứng UI (Chromium headless qua `/snap`, instance tạm trên **bản sao** vault thật — không
+      chạm vault LXC 107): **26 PASS, 0 FAIL** — nút ▾ có ở `status`/`priority`, không có ở `title`/`due`;
+      list đúng 6 giá trị theo thứ tự SCHEMA, giá trị hiện tại được ✓ đúng một lần; chọn `in-progress`
+      ghi `status: in-progress` xuống file với đúng một dòng `status:` và **phần còn lại byte-identical**
+      (kể cả khối `Update:` người dùng tự gõ); reload giữ giá trị mới và list đánh dấu lại; **abnormality
+      page thật** hiện đúng 5 giá trị của abnormality, ✓ `contained`, không lẫn status của task; **task có
+      status ngoài bảng** (`wip-ish`) giữ nguyên, đứng đầu, gắn cờ, **không** bị ghi lại; note `type:
+      system` (ADR, `status: accepted`) **không** hiện picker và giữ nguyên text; console/pageerror rỗng.
+      `bash deploy/smoke.sh` trên instance tạm: **17 PASS, 0 FAIL**.
+
 ### Nhật ký tiến độ
+- 2026-09-30 (Phase 45 — danh sách giá trị cho thuộc tính đóng, FR-23, issue #61): người dùng nói "the
+  task will be selection list, to easy select status". Trên trang task, `status:` là text tự do nên đổi
+  trạng thái phải gõ đúng id — mà gõ sai thì **không vô hại**: board chỉ map id canonical + vài alias,
+  giá trị lạ thành một cột riêng và **không bao giờ** bị sửa lại khi đọc. Thêm bảng từ vựng thuần logic
+  (`web/src/lib/propOptions.ts`, theo `relats/SCHEMA.md`; `status` theo loại trang — task / abnormality /
+  document có từ vựng riêng, loại trang không có từ vựng thì không hiện picker) + nút `▾` cạnh giá trị mở
+  list (mount qua
+  `themedPopupHost()` như suggester sẵn có), chọn xong ghi qua `mutate()`. Nguyên tắc giữ nguyên: field
+  vẫn là text sửa được, giá trị lạ **được giữ, đứng đầu, gắn nhãn** — không chuẩn hoá ngầm, không chặn
+  `waiting`/`dropped`. Verify: `npm run typecheck` 4 workspace; server 168 / web 157 PASS; Chromium
+  headless trên bản sao vault thật 26/26 (chọn `in-progress` ⇒ file đổi đúng một dòng `status:`, phần
+  còn lại byte-identical, reload giữ giá trị mới; abnormality page hiện từ vựng riêng, không lẫn status
+  của task; `status: accepted` trên ADR `type: system` không hiện picker và giữ nguyên text);
+  `deploy/smoke.sh` 17/17 trên instance tạm.
 - 2026-09-27 (Phase 44 — tải file nhị phân từ vault, FR-22, issue #59): người dùng báo "the pptx needed to
   be downloaded from 107". Truy vết: file `.pptx` phục vụ đúng (`200`, 47.490 byte, sha256 khớp) nhưng
   **không có đường lấy ra dùng được** — mọi loại không có viewer rơi vào editor markdown, và URL duy nhất

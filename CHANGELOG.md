@@ -7,6 +7,18 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
 ## [Unreleased]
 
 ### Added
+- **A status you pick, not a status you type.** On a task page the `status` was free text, so changing
+  it meant spelling the id exactly — and a typo is not cosmetic: the board maps only
+  `open / in-progress / blocked / done` plus a few aliases, so anything else becomes a column of its
+  own and is never rewritten on read. Keys whose values are a closed list — `status`, `priority`,
+  `origin`, `confidence`, `severity` — now show a `▾` beside the value that opens the vocabulary the
+  vault's `SCHEMA.md` defines (`status` per page kind: a task's statuses are not an abnormality's, and
+  a page kind with none — an ADR, an entity — offers no list at all), marks the note's current value,
+  and writes the pick back through the
+  same frontmatter path as typing (one `status:` line changes; the rest of the note is untouched). The
+  field stays editable text, and a value the table does not know (`accepted`, `dropped`) is kept,
+  listed first with a label and never rewritten — the vocabulary lives in the vault, the app only
+  saves the typing. *(issue #61)*
 - **The vault can hand you a file it cannot show.** A Word, Excel or PowerPoint document, an archive
   or an RTF used to fall through to the markdown editor — which rendered its bytes as noise — and the
   only URL that served it (`/api/files/content?path=…`) saved it as `content`, with no extension, so
