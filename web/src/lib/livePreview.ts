@@ -11,6 +11,7 @@ import { syntaxTree } from '@codemirror/language';
 import { CALLOUT_SLOT, CALLOUT_RE, calloutDefaultTitle, calloutIconSvg } from './callouts';
 import { openLightbox } from './imageLightbox';
 import { VIDEO_EXT_RE, AUDIO_EXT_RE, PDF_EXT_RE } from './media';
+import { optionsFor, type PropOption } from './propOptions';
 import { useStore } from './store';
 import { themedPopupHost } from './theme';
 
@@ -1519,6 +1520,13 @@ class FrontmatterWidget extends WidgetType {
 
     // Change a property's type: persist to .obsidian/types.json, then convert the
     // note's YAML if list-ness changed (else just refresh the icon in place).
+    // A page's own `type` decides which status vocabulary applies (FR-23): a task's statuses are
+    // not an abnormality's. Read from the block's YAML so the rows and setType agree.
+    const pageKind = () => {
+      const rows = parseFrontmatter(this.yaml);
+      return (rows.find((p) => p.key.trim().toLowerCase() === 'type')?.values[0] ?? '').trim();
+    };
+
     const setType = async (key: string, dt: string) => {
       try {
         const types = await persistPropertyType(key, dtToObs(dt, key));
@@ -1551,7 +1559,13 @@ class FrontmatterWidget extends WidgetType {
         }
         const valCell = row.querySelector('.prop-val');
         const oldField = row.querySelector('.prop-val-field') as HTMLElement | null;
-        if (valCell && oldField) valCell.replaceChild(makeScalarField(dt, oldField.dataset.raw ?? ''), oldField);
+        if (valCell && oldField) {
+          // Rebuild the cell's single control rather than swapping the field in place: a
+          // pick-list field (FR-23) sits inside its own wrapper alongside the ▾ button.
+          const fresh = makeScalarField(dt, oldField.dataset.raw ?? '', key, pageKind());
+          valCell.textContent = '';
+          valCell.appendChild(fresh);
+        }
       }
     };
 
@@ -1597,9 +1611,88 @@ class FrontmatterWidget extends WidgetType {
       el.addEventListener('blur', onCommit);
     };
 
+    // The value list for a closed-vocabulary property (FR-23): a ▾ beside the field that opens
+    // the vault's values. Same popup host and classes as the list-item suggester, so the theme
+    // wrapper's palette resolves; picking writes the frontmatter through mutate() like any edit.
+    const pickButton = (key: string, field: HTMLElement, opts: PropOption[]): HTMLElement => {
+      const btn = document.createElement('span');
+      btn.className = 'prop-pick-btn';
+      btn.textContent = '▾';
+      btn.title = `Choose a ${key}`;
+      btn.setAttribute('role', 'button');
+      btn.setAttribute('aria-label', `Choose a ${key} value`);
+      btn.setAttribute('aria-haspopup', 'listbox');
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        openPickList(field, opts);
+      });
+      return btn;
+    };
+
+    const openPickList = (field: HTMLElement, opts: PropOption[]) => {
+      const dd = document.createElement('div');
+      dd.className = 'cm-props-dropdown prop-val-dropdown';
+      dd.setAttribute('role', 'listbox');
+      themedPopupHost().appendChild(dd);
+      // Fixed-position just below the field (viewport coords; rect forces reflow).
+      const r = field.getBoundingClientRect();
+      dd.style.left = `${Math.round(r.left)}px`;
+      dd.style.top = `${Math.round(r.bottom + 2)}px`;
+
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        dd.remove();
+        window.removeEventListener('mousedown', away, true);
+        window.removeEventListener('keydown', escape, true);
+      };
+      const pick = (value: string) => {
+        close();
+        // The DOM field is the source readProps reads: set both, then commit once.
+        field.textContent = value;
+        field.dataset.raw = value;
+        mutate(() => {});
+      };
+      const away = (e: MouseEvent) => {
+        if (!dd.contains(e.target as Node)) close();
+      };
+      const escape = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') close();
+      };
+      window.addEventListener('mousedown', away, true);
+      window.addEventListener('keydown', escape, true);
+
+      for (const o of opts) {
+        const it = document.createElement('div');
+        it.className = 'cm-props-dd-item' + (o.offList ? ' is-offlist' : '');
+        it.dataset.value = o.value;
+        it.setAttribute('role', 'option');
+        it.setAttribute('aria-selected', o.current ? 'true' : 'false');
+        const ic = document.createElement('span');
+        ic.className = 'prop-icon';
+        ic.textContent = o.current ? '✓' : '';
+        const nm = document.createElement('span');
+        nm.textContent = o.value;
+        it.append(ic, nm);
+        if (o.offList) {
+          // In the note but not in SCHEMA: shown, never rewritten, and labelled as such.
+          const hint = document.createElement('span');
+          hint.className = 'prop-val-offlist';
+          hint.textContent = 'in this note';
+          it.appendChild(hint);
+        }
+        it.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          pick(o.value);
+        });
+        dd.appendChild(it);
+      }
+    };
+
     // A value editor whose control matches the property type. `dataset.raw` always
     // holds the canonical YAML value so readProps never rewrites untouched fields.
-    const makeScalarField = (dt: string, value: string): HTMLElement => {
+    const makeScalarField = (dt: string, value: string, key: string, type: string): HTMLElement => {
       const commitChange = () => mutate(() => {});
       if (dt === 'number') {
         const inp = document.createElement('input');
@@ -1654,7 +1747,15 @@ class FrontmatterWidget extends WidgetType {
           mutate(() => {});
         }
       });
-      return span;
+      // Closed-vocabulary keys get the vault's values as a list to pick from (FR-23). The
+      // field stays editable text: SCHEMA owns the vocabulary, the picker only saves typing
+      // an id from memory, and a value it does not know is still shown and still writable.
+      const opts = this.ro ? null : optionsFor(key, value, type);
+      if (!opts) return span;
+      const wrap = document.createElement('span');
+      wrap.className = 'prop-val-wrap';
+      wrap.append(span, pickButton(key, span, opts));
+      return wrap;
     };
 
     // Add an item to a list property via a typed input + suggestion dropdown
@@ -1739,6 +1840,7 @@ class FrontmatterWidget extends WidgetType {
       );
     };
 
+    const pageType = pageKind();
     props.forEach((p, idx) => {
       const dt = displayTypeOf(p);
       const renderAsList = dt === 'list' || p.list;
@@ -1825,7 +1927,7 @@ class FrontmatterWidget extends WidgetType {
         });
         v.appendChild(add);
       } else {
-        v.appendChild(makeScalarField(dt, p.values[0] ?? ''));
+        v.appendChild(makeScalarField(dt, p.values[0] ?? '', p.key, pageType));
       }
 
       const del = document.createElement('span');

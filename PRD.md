@@ -1,7 +1,14 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.22 · Cập nhật: 2026-09-27 · Trạng thái: Draft
+> Phiên bản: 1.23 · Cập nhật: 2026-09-30 · Trạng thái: Draft
+> Changelog 1.23 (FR-23 — chọn giá trị cho thuộc tính đóng: nút `▾` + danh sách giá trị, issue #61): trên
+> trang task, `status:` là **text tự do** nên đổi trạng thái phải gõ đúng id — mà gõ sai thì không vô hại:
+> board chỉ map id canonical (`open`/`in-progress`/`blocked`/`done`) + vài alias, mọi giá trị khác thành
+> một cột riêng và **không bao giờ** bị sửa lại khi đọc. Thêm `web/src/lib/propOptions.ts` (bảng từ vựng
+> theo `relats/SCHEMA.md`: `status`, `priority`, `origin`, `confidence`, `severity`) và nút `▾` cạnh giá
+> trị ở Properties mở danh sách (**giá trị lạ giữ nguyên, đứng đầu, gắn nhãn**; field vẫn là text sửa
+> được; chọn xong ghi qua đúng đường frontmatter như gõ tay).
 > Changelog 1.22 (FR-22 — tải file nhị phân từ vault: pane tải + `Content-Disposition`, issue #59): file
 > Word/Excel/PowerPoint nằm trong vault nhưng **không lấy ra được**: mọi định dạng không có viewer rơi vào
 > editor markdown (hiện byte nhị phân) và URL duy nhất phục vụ file
@@ -951,6 +958,50 @@ dùng được** — mở thì ra editor markdown toàn byte nhị phân, mà t�
   Playwright (Chromium headed, Xvfb) trên instance thật LXC 107: mở file `.pptx` trong vault ⇒ trình duyệt
   tải file, tên lưu `operations-documentation-system-2026-09-27.pptx`, sha256 khớp bản build
   (`fd0aaf87…`), nội dung là zip hợp lệ (`PK`); PDF giữ `200 application/pdf` inline + range `206`.
+
+### FR-23 · Chọn giá trị cho thuộc tính đóng: nút `▾` + danh sách giá trị (issue #61)
+Mục tiêu: những thuộc tính có **từ vựng đóng** (`status`, `priority`, `origin`, `confidence`,
+`severity`) không nên phải gõ tay — chọn từ danh sách, nhưng **không** chuẩn hoá ngầm giá trị lạ và
+**không** cho giá trị nào bị mất.
+
+- **FR-23.1 · Bảng từ vựng, thuần logic** (`web/src/lib/propOptions.ts`, mới): `PROP_PICK_LISTS` theo
+  `relats/SCHEMA.md` — `priority` = `P1`–`P3`, `origin`, `confidence`, `severity`; `status` **theo loại
+  trang** (`STATUS_BY_TYPE`): `task` = `open`/`in-progress`/`waiting`/`blocked`/`done`/`dropped`,
+  `abnormality` = `open`/`contained`/`countermeasure-agreed`/`verified`/`closed`, `document` =
+  `open`/`acted`/`archived` — **status của task không phải status của abnormality**, nên loại trang nào
+  không có từ vựng trong SCHEMA (`system`, `entity`, …) thì **không** hiện picker (thà không có danh sách
+  còn hơn danh sách sai: `accepted` của một ADR không phải status của task). `hasPickList(key, type)` /
+  `pickListFor(key, type)` (khớp sau `trim`, bỏ phân biệt hoa-thường) và `optionsFor(key, current, type)`.
+  Giá trị đang dùng được đánh
+  dấu `current`; giá trị **không** có trong bảng được giữ nguyên và trả về **đầu danh sách** với
+  `offList` ⇒ người dùng thấy đúng những gì note đang có, không bị "sửa hộ". Giá trị rỗng không sinh
+  option nào (xoá giá trị là việc của nút × của hàng, không phải của picker). Không phụ thuộc DOM ⇒
+  test được bằng `node:test`.
+- **FR-23.2 · Nút `▾` ở Properties** (`web/src/lib/livePreview.ts`): `makeScalarField()` nhận thêm `key`
+  của hàng; với khoá có pick-list, field được bọc trong `.prop-val-wrap` kèm nút `.prop-pick-btn`
+  (`▾`, `aria-haspopup="listbox"`). `openPickList()` mount danh sách vào **`themedPopupHost()`**
+  (`lib/theme.ts`) và dùng lại đúng các class sẵn có của menu thêm property
+  (`.cm-props-dropdown.prop-val-dropdown`, `.cm-props-dd-item`) — popup mount ngoài wrapper theme sẽ mất
+  palette (xem README, "Floating popups must mount inside the themed root").
+- **FR-23.3 · Ghi đúng như gõ tay**: chọn một giá trị ⇒ `dataset.raw` + `textContent` của field rồi
+  `mutate()`, tức cùng một đường frontmatter như gõ tay — **một** dòng `status:` đổi, phần còn lại của
+  note không bị chạm (kể cả các khối `Update:` người dùng tự gõ). Field **vẫn là text sửa được**: giá trị
+  ngoài bảng (`accepted`, `dropped` tuỳ vault) vẫn gõ được và không bao giờ bị ghi đè khi đọc. Escape và
+  click ra ngoài đóng danh sách. `setType` (đổi *Property type*) dựng lại cả ô giá trị thay vì
+  `replaceChild` vào chính field, vì field có thể nằm trong wrapper.
+- **FR-23.4 · Không đổi phần còn lại**: `lib/tasks.ts` giữ nguyên id canonical + alias của board (không
+  thêm cột mới, không đổi nhãn); không thêm tham số server/index nào — từ vựng nằm ở client, app chỉ ghi
+  lại giá trị người dùng chọn.
+- **FR-23.5 · Kiểm chứng**: `npm run typecheck` 4 workspace sạch; `npm test` server **168 PASS**, web
+  **159 PASS** (`web/tests/propOptions.test.ts` mới, 10 case); Chromium headless (snap) trên instance tạm
+  dựng bằng **bản sao** vault thật (không chạm vault LXC 107): **26 PASS / 0 FAIL** — `▾` chỉ xuất hiện ở
+  khoá có từ vựng; danh sách đúng thứ tự SCHEMA với giá trị hiện tại được ✓ một lần; chọn `in-progress`
+  ⇒ file `deliver-2027-budget-planning.md` đổi **đúng một dòng** `status:` và phần còn lại byte-identical
+  (kể cả khối `Update:` người dùng tự gõ); reload giữ giá trị mới; một **abnormality page** thật hiện
+  đúng từ vựng abnormality (không lẫn `in-progress`/`blocked`/`done` của task) và ✓ đúng `contained`; một
+  **task có status ngoài bảng** (`wip-ish`, tạo trong bản sao vault) giữ nguyên giá trị, đứng đầu danh
+  sách và **không** bị ghi lại; note `type: system` (ADR, `status: accepted`) **không** hiện picker và giữ
+  nguyên text; console/pageerror rỗng; `bash deploy/smoke.sh` trên instance tạm **17 PASS / 0 FAIL**.
 
 ## 4. Yêu cầu phi chức năng (NFR)
 - **Bảo mật**: password hash scrypt, JWT secret tự sinh, API key hash khi lưu, path traversal guard

@@ -142,6 +142,13 @@ scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head and merge 
 - 📥 **Download the vault's binaries** — a Word/Excel/PowerPoint file, an archive, an RTF: types with
   no in-app viewer open a pane with a **Download** button and save under their own name (extension
   included), instead of landing in the editor as binary noise or saving as `content`.
+- 🏷️ **Pick a status instead of typing one** — keys whose values are a closed list (`status`, `priority`,
+  `origin`, `confidence`, `severity`) show a `▾` beside the value that opens the vocabulary on the note
+  itself, with the note's own value marked. `status` follows the page kind (a task's list is not an
+  abnormality's; a kind with no list — an ADR, an entity — gets no `▾`). The board maps only
+  `open / in-progress / blocked / done` (plus aliases like `wip`, `waiting`); any other status gets a
+  column of its own, so the picker offers the ids in use. The field stays editable text, and a value the
+  app does not know (`accepted`, `dropped`) is kept, shown first and never rewritten.
 - 🕸️ **Graph view** — force-directed graph built from your wikilinks, with fly-to node
   search and highlighting.
 - 📄 **New note from template** — pick a template from your vault's `templates` folder and it is
