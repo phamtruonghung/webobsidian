@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-11-05 (Phase 46 — template picker liệt kê mọi thư mục `templates` thay vì thư mục đầu tiên: FR-17, issue #64)
+Cập nhật lần cuối: 2026-11-05 (Phase 46 — template picker liệt kê mọi thư mục `templates` thay vì thư mục đầu tiên: FR-17, issue #64; sửa dòng "Checked:" của `templates-empty` render literal thẻ HTML, issue #66)
 
 ---
 
@@ -830,6 +830,13 @@ Cập nhật lần cuối: 2026-11-05 (Phase 46 — template picker liệt kê m
   `meet`/`weekly` chọn đúng `relats/templates/meeting.md` / `weekly-review.md` (tạo ra
   `relats/meetings/…`, `relats/reviews/…`); vault chỉ có `office-104/templates` → `templates-empty`, vault
   không có thư mục `templates` → `templates-missing`.
+- 2026-11-05 (Phase 46 — sửa dòng "Checked:" của `templates-empty`, issue #66): khi vault có **≥2** thư mục
+  `templates` và không thư mục nào chứa `.md`, modal nối danh sách bằng chuỗi `'</code>, <code>'` — trong
+  JSX đó là text bình thường nên React escape, người dùng đọc `Checked: a/templates</code>, <code>b/templates`.
+  Sửa: mỗi thư mục render thành một `<code>` riêng (`Fragment`, dấu `, ` thật). Không đổi hành vi ba trạng
+  thái, không đổi câu chữ. Verify: `npm test` server 168 / web 164 PASS, `npm run typecheck` 4 workspace;
+  `renderToString` component thật với vault 2 thư mục rỗng — trước sửa **1** thẻ `<code>` + `&lt;/code&gt;`,
+  sau sửa **2** thẻ `<code>` và `Checked: <code>a/templates</code>, <code>b/templates</code>`.
 - 2026-09-30 (Phase 45 — danh sách giá trị cho thuộc tính đóng, FR-23, issue #61): người dùng nói "the
   task will be selection list, to easy select status". Trên trang task, `status:` là text tự do nên đổi
   trạng thái phải gõ đúng id — mà gõ sai thì **không vô hại**: board chỉ map id canonical + vài alias,

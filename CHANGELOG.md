@@ -59,6 +59,11 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   create-only server-side) and it does not create a missing folder — it names it instead. *(issue #42)*
 
 ### Fixed
+- **The template picker's "Checked:" line prints folder names, not HTML.** When two or more `templates`
+  folders exist and none of them holds a `.md`, the `templates-empty` message built its folder list by
+  joining on `'</code>, <code>'` — an ordinary string child in JSX, so React escaped it and the line read
+  `Checked: a/templates</code>, <code>b/templates`. Each folder now renders as its own `<code>` element,
+  separated by a real comma. *(issue #66)*
 - **The template picker lists every `templates` folder instead of the first one** (issue #64). Discovery
   took the first folder named `templates` breadth-first, and this vault has two: `office-104/templates`
   (docx/html/pdf, no markdown) sorts before `relats/templates` (the 10 markdown templates), so the picker
