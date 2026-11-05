@@ -3,7 +3,7 @@ import { useStore } from '../lib/store';
 import { findNode } from '../lib/tree';
 import {
   dateStamp,
-  findTemplatesFolder,
+  findTemplatesFolders,
   listTemplates,
   resolveTargetFolder,
   slugify,
@@ -45,13 +45,15 @@ function Picker() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const templatesFolder = useMemo(() => findTemplatesFolder(tree), [tree]);
-  const templates = useMemo(() => listTemplates(tree, templatesFolder), [tree, templatesFolder]);
+  const templatesFolders = useMemo(() => findTemplatesFolders(tree), [tree]);
+  const templates = useMemo(() => listTemplates(tree, templatesFolders), [tree, templatesFolders]);
 
   const sel = chosen;
   const folder = typedFolder ?? (sel ? resolveTargetFolder(tree, sel) : '');
 
-  if (templatesFolder === null) {
+  // No folder named `templates` anywhere in the vault: the vault has nothing to
+  // pick from (the folder itself is what is missing).
+  if (templatesFolders.length === 0) {
     return (
       <div className="modal-bg" onClick={() => setOpen(false)}>
         <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -65,6 +67,28 @@ function Picker() {
 
   const lc = q.trim().toLowerCase();
   const shown = templates.filter((t) => !lc || t.title.toLowerCase().includes(lc));
+
+  // The folders exist but hold no markdown (a docx-only `templates` folder, for
+  // instance). That is not a failed search, so it never says "No matching
+  // template" — a query-shaped dead end that reads as a broken filter.
+  if (templates.length === 0) {
+    return (
+      <div className="modal-bg" onClick={() => setOpen(false)}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="palette-item" data-testid="templates-empty">
+            {templatesFolders.length === 1
+              ? 'A templates folder exists'
+              : `${templatesFolders.length} templates folders exist`}{' '}
+            in this vault but none contains a markdown (.md) file — nothing to pick.
+            <div className="tpl-path">
+              Checked: <code>{templatesFolders.join('</code>, <code>')}</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const slug = slugify(title.trim());
   const dir = folder.trim();
   const date = dateStamp(new Date());

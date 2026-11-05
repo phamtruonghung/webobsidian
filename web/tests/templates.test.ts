@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import type { TreeNode } from '../src/lib/api';
 import {
   dateStamp,
-  findTemplatesFolder,
+  findTemplatesFolders,
   listTemplates,
   resolveTargetFolder,
   slugify,
@@ -108,22 +108,105 @@ test('substituteTemplate leaves a template with no tokens untouched', () => {
   assert.equal(substituteTemplate(body, { title: 'x', date: '2026-09-26', time: '07:05', slug: 'x' }), body);
 });
 
-// ---- templates folder ----------------------------------------------------
+// ---- templates folders (vault-wide lookup, issue #64) --------------------
 
-test('findTemplatesFolder takes the shallowest folder named templates, at any case', () => {
-  assert.equal(findTemplatesFolder(vault), 'Wiki/templates');
-  const upper = folder('', [folder('Vault', [folder('Vault/Templates')])]);
-  assert.equal(findTemplatesFolder(upper), 'Vault/Templates');
+/** The live vault's shape: `office-104/templates` holds no markdown at all. */
+const tenMd = [
+  'abnormality.md',
+  'daily.md',
+  'document.md',
+  'meeting.md',
+  'one-on-one.md',
+  'procedure.md',
+  'query.md',
+  'shift-handover.md',
+  'task.md',
+  'weekly-review.md',
+];
+const liveVault = folder('', [
+  folder('office-104', [
+    folder('office-104/templates', [
+      file('office-104/templates/manager-weekly-review-template-v1.docx', 'docx'),
+      file('office-104/templates/manager-weekly-review-template-v1.html', 'html'),
+      file('office-104/templates/manager-weekly-review-template-v1.pdf', 'pdf'),
+    ]),
+  ]),
+  folder('relats', [folder('relats/templates', tenMd.map((n) => file(`relats/templates/${n}`)))]),
+]);
+
+test('findTemplatesFolders answers every folder named templates, shallowest first then alphabetical', () => {
+  // office-104 sorts before relats — the exact order that made first-folder-wins pick the docx-only one.
+  assert.deepEqual(findTemplatesFolders(liveVault), ['office-104/templates', 'relats/templates']);
+  assert.deepEqual(findTemplatesFolders(vault), ['Wiki/templates', 'Wiki/concepts/templates']);
+  assert.deepEqual(
+    findTemplatesFolders(folder('', [folder('templates'), folder('Wiki', [folder('Wiki/templates')])])),
+    ['templates', 'Wiki/templates'],
+  );
+  assert.deepEqual(findTemplatesFolders(folder('', [folder('Vault', [folder('Vault/Templates')])])), [
+    'Vault/Templates',
+  ]);
+  assert.deepEqual(findTemplatesFolders(null), []);
 });
 
-test('findTemplatesFolder returns null when there is none — a file named templates.md is not one', () => {
-  assert.equal(findTemplatesFolder(vault.children![1] as TreeNode | null), null);
-  assert.equal(findTemplatesFolder(folder('', [file('templates.md')])), null);
-  assert.equal(findTemplatesFolder(null), null);
+test('findTemplatesFolders returns [] when there is none — a file named templates.md is not one', () => {
+  assert.deepEqual(findTemplatesFolders(vault.children![1] as TreeNode | null), []);
+  assert.deepEqual(findTemplatesFolders(folder('', [file('templates.md')])), []);
 });
 
-test('listTemplates returns markdown only, alphabetically, ignoring other extensions', () => {
-  assert.deepEqual(listTemplates(vault, 'Wiki/templates').map((t) => t.title), [
+test('the md-less office-104/templates cannot shadow relats/templates: all 10 markdown templates list', () => {
+  const folders = findTemplatesFolders(liveVault);
+  assert.deepEqual(folders, ['office-104/templates', 'relats/templates']);
+  assert.deepEqual(
+    listTemplates(liveVault, folders).map((t) => t.path),
+    tenMd.map((n) => `relats/templates/${n}`),
+  );
+});
+
+test('two md-bearing template folders list the union, de-duplicated by path, alphabetical by title', () => {
+  const both = folder('', [
+    folder('a', [folder('a/templates', [file('a/templates/meeting.md'), file('a/templates/daily.md')])]),
+    folder('b', [folder('b/templates', [file('b/templates/weekly-review.md'), file('b/templates/meeting.md')])]),
+  ]);
+  const folders = findTemplatesFolders(both);
+  const listed = listTemplates(both, folders);
+  assert.deepEqual(
+    listed.map((t) => t.path),
+    [
+      'a/templates/daily.md',
+      'a/templates/meeting.md',
+      'b/templates/meeting.md',
+      'b/templates/weekly-review.md',
+    ],
+  );
+  // The same folder handed in twice is still one row per path.
+  assert.equal(listTemplates(both, [...folders, 'a/templates']).length, listed.length);
+});
+
+test('duplicate basenames stay distinguishable — each row keeps its own path', () => {
+  const dup = folder('', [
+    folder('a', [folder('a/templates', [file('a/templates/note.md')])]),
+    folder('b', [folder('b/templates', [file('b/templates/note.md')])]),
+  ]);
+  const listed = listTemplates(dup, findTemplatesFolders(dup));
+  assert.deepEqual(
+    listed.map((t) => t.title),
+    ['note', 'note'],
+  );
+  assert.deepEqual(
+    listed.map((t) => t.path),
+    ['a/templates/note.md', 'b/templates/note.md'],
+  );
+});
+
+test('no templates folder anywhere → [] (the vault has none, not the query missing)', () => {
+  assert.deepEqual(findTemplatesFolders(folder('', [folder('relats', [folder('relats/notes')])])), []);
+  assert.deepEqual(listTemplates(vault, []), []);
+  assert.deepEqual(listTemplates(liveVault, []), []);
+  assert.deepEqual(listTemplates(liveVault, ['relats/nope']), []);
+});
+
+test('listTemplates keeps markdown-only, alphabetical, other extensions ignored', () => {
+  assert.deepEqual(listTemplates(vault, ['Wiki/templates']).map((t) => t.title), [
     'abnormality',
     'daily',
     'meeting',
@@ -131,8 +214,7 @@ test('listTemplates returns markdown only, alphabetically, ignoring other extens
     'shift-handover',
     'weekly-review',
   ]);
-  assert.deepEqual(listTemplates(vault, null), []);
-  assert.deepEqual(listTemplates(vault, 'Wiki/nope'), []);
+  assert.deepEqual(listTemplates(vault, ['Wiki/nope']), []);
 });
 
 // ---- target folder -------------------------------------------------------
@@ -161,6 +243,29 @@ test('resolveTargetFolder does not mistake a nested folder for a sibling', () =>
   // Wiki/concepts/templates exists, but meeting.md's target must be searched
   // among Wiki/'s children only.
   assert.equal(resolveTargetFolder(vault, 'Wiki/templates/meeting.md'), 'Wiki/meetings');
+});
+
+test('resolveTargetFolder derives from the template’s own parent — office-104 never aims into relats/', () => {
+  // relats/ really holds a `meetings` folder, so a parent-agnostic lookup would
+  // happily send an office-104 template's note there (issue #64).
+  const two = folder('', [
+    folder('office-104', [
+      folder('office-104/templates', [file('office-104/templates/meeting.md')]),
+    ]),
+    folder('relats', [
+      folder('relats/meetings'),
+      folder('relats/templates', [file('relats/templates/meeting.md')]),
+    ]),
+  ]);
+  assert.equal(resolveTargetFolder(two, 'office-104/templates/meeting.md'), '');
+  assert.equal(resolveTargetFolder(two, 'relats/templates/meeting.md'), 'relats/meetings');
+  // The live shape: the md-less office-104 folder resolves nothing at all, and
+  // nothing it returns can be under relats/.
+  for (const tpl of ['x.md', 'meeting.md', 'manager-weekly-review-template-v1.md']) {
+    const hit = resolveTargetFolder(liveVault, `office-104/templates/${tpl}`);
+    assert.equal(hit, '', `office-104/templates/${tpl} must not resolve (got "${hit}")`);
+    assert.ok(!hit.startsWith('relats'), `never into relats/ (got "${hit}")`);
+  }
 });
 
 // ---- unique path ---------------------------------------------------------

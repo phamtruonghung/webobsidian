@@ -151,7 +151,8 @@ scripts/merge-upstream-pr.sh <n>           # fetch refs/pull/<n>/head and merge 
   app does not know (`accepted`, `dropped`) is kept, shown first and never rewritten.
 - 🕸️ **Graph view** — force-directed graph built from your wikilinks, with fly-to node
   search and highlighting.
-- 📄 **New note from template** — pick a template from your vault's `templates` folder and it is
+- 📄 **New note from template** — pick a template from any `templates` folder in your vault (all of them
+  are listed, so a folder holding only `.docx` files cannot hide the markdown ones) and it is
   created as `<folder>/<YYYY-MM-DD>-<slug>.md` with its placeholders filled and opened for you:
   no manual copy, rename or re-dating (command palette → *New note from template*)
 - 🗂️ **Tasks board** — Kanban view over `type: task` notes (`/tasks`); drag a card to change its
