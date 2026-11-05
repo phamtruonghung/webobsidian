@@ -69,31 +69,51 @@ export function substituteTemplate(content: string, t: TemplateTokens): string {
 }
 
 /**
- * The vault's templates folder: the shallowest folder named `templates`
- * (case-insensitive), e.g. `Wiki/templates`. Breadth-first, so a nested copy
- * cannot shadow the top-level one.
+ * Every folder named `templates` in the vault (case-insensitive), shallowest
+ * first, then alphabetical — the vault-wide lookup that replaced first-folder-wins.
+ *
+ * The live vault carries two (`office-104/templates` with only docx/html/pdf and
+ * `relats/templates` with the markdown), and a single-answer lookup is
+ * data-dependent: whichever sorts first wins and the picker lists nothing. So
+ * discovery returns all of them and the caller unions the results (issue #64).
  */
-export function findTemplatesFolder(root: TreeNode | null): string | null {
-  if (!root) return null;
+export function findTemplatesFolders(root: TreeNode | null): string[] {
+  if (!root) return [];
+  const found: { path: string; depth: number }[] = [];
   const queue: TreeNode[] = [...(root.children ?? [])];
   while (queue.length) {
     const n = queue.shift()!;
-    if (n.type === 'folder' && n.name.toLowerCase() === 'templates') return n.path;
+    if (n.type === 'folder' && n.name.toLowerCase() === 'templates') {
+      found.push({ path: n.path, depth: n.path.split('/').length });
+    }
     queue.push(...(n.children ?? []));
   }
-  return null;
+  return found
+    .sort((a, b) => a.depth - b.depth || a.path.localeCompare(b.path))
+    .map((f) => f.path);
 }
 
-/** Every markdown template in that folder, alphabetical. */
+/**
+ * The union of the markdown templates in every given folder, de-duplicated by
+ * path and alphabetical by title (path breaks a tie so two folders holding the
+ * same basename stay two distinguishable rows — the row renders the path).
+ * Folders the tree does not hold are ignored rather than fatal.
+ */
 export function listTemplates(
   root: TreeNode | null,
-  folder: string | null,
+  folders: string[],
 ): { path: string; title: string }[] {
-  const node = folder ? findNode(root, folder) : null;
-  return (node?.children ?? [])
-    .filter((c) => c.type === 'file' && MD_RE.test(c.name))
-    .map((c) => ({ path: c.path, title: c.name.replace(MD_RE, '') }))
-    .sort((a, b) => a.title.localeCompare(b.title));
+  const seen = new Set<string>();
+  const out: { path: string; title: string }[] = [];
+  for (const folder of folders) {
+    const node = findNode(root, folder);
+    for (const c of node?.children ?? []) {
+      if (c.type !== 'file' || !MD_RE.test(c.name) || seen.has(c.path)) continue;
+      seen.add(c.path);
+      out.push({ path: c.path, title: c.name.replace(MD_RE, '') });
+    }
+  }
+  return out.sort((a, b) => a.title.localeCompare(b.title) || a.path.localeCompare(b.path));
 }
 
 /**

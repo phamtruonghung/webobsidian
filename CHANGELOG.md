@@ -59,6 +59,16 @@ changes. The format is loosely based on [Keep a Changelog](https://keepachangelo
   create-only server-side) and it does not create a missing folder — it names it instead. *(issue #42)*
 
 ### Fixed
+- **The template picker lists every `templates` folder instead of the first one** (issue #64). Discovery
+  took the first folder named `templates` breadth-first, and this vault has two: `office-104/templates`
+  (docx/html/pdf, no markdown) sorts before `relats/templates` (the 10 markdown templates), so the picker
+  resolved the docx-only folder, filtered it to `.md`, got nothing, and every query answered "No matching
+  template" — a search-shaped dead end for a lookup bug. It now unions **every** `templates` folder in the
+  vault (`findTemplatesFolders`, shallowest first then alphabetical) and de-duplicates the result by path,
+  so rows keep their full path and two folders with the same basename stay distinguishable. A folder that
+  exists but holds no markdown gets its own message (`templates-empty`, naming the folders it checked)
+  instead of pretending a query failed, and the note's target folder is still derived per template path, so
+  a template under `office-104/` can never aim a note at `relats/*`.
 - **Reading a note that does not exist is a `404`, not a `500`.** `GET /api/files/content` resolved a
   missing path by basename (the `![[image.png]]` embed case) and then read it anyway, so ENOENT surfaced
   as a 500. Found by the new live lock assertion in `deploy/smoke.sh`.

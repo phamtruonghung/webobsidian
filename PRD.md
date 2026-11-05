@@ -1,7 +1,20 @@
 # PRD — WebObsidian
 
 > Product Requirements Document
-> Phiên bản: 1.23 · Cập nhật: 2026-09-30 · Trạng thái: Draft
+> Phiên bản: 1.24 · Cập nhật: 2026-11-05 · Trạng thái: Draft
+> Changelog 1.24 (FR-17 — sửa lỗi picker không liệt kê template nào, issue #64): modal **New note from
+> template** trên production liệt kê **trống** và mọi truy vấn trả "No matching template". Nguyên nhân
+> **không phải ô lọc**: `findTemplatesFolder()` chỉ trả về **thư mục đầu tiên** tên `templates` (duyệt theo
+> bề rộng), trong khi vault thật có **hai** — `office-104/templates` (chỉ `docx/html/pdf`, không có file
+> `.md`) đứng trước `relats/templates` (10 template markdown) vì `listTree` sắp thư mục theo tên ⇒ picker
+> nhận nhầm thư mục không có markdown, lọc `.md` → `[]`. Sửa thành dò **toàn vault**: `findTemplatesFolders(root)`
+> trả **mọi** thư mục tên `templates` (không phân biệt hoa thường, nông nhất trước rồi theo alphabet) và
+> `listTemplates(root, folders)` lấy **hợp nhất** các file `.md`, khử trùng theo path, sắp theo title (trùng
+> title thì theo path) — hàng vẫn hiện đường dẫn nên hai thư mục cùng basename không lẫn. Modal phân biệt
+> ba trạng thái: không có thư mục `templates` nào (`templates-missing`); có thư mục nhưng **không có file
+> markdown nào** (`templates-empty`, nêu rõ thư mục đã kiểm tra — không giả vờ truy vấn lỗi); và có template
+> nhưng truy vấn không khớp ("No matching template"). `resolveTargetFolder()` vẫn suy ra từ **cha của chính
+> template đó**, nên template nằm trong `office-104/` không bao giờ ghi note vào `relats/*`.
 > Changelog 1.23 (FR-23 — chọn giá trị cho thuộc tính đóng: nút `▾` + danh sách giá trị, issue #61): trên
 > trang task, `status:` là **text tự do** nên đổi trạng thái phải gõ đúng id — mà gõ sai thì không vô hại:
 > board chỉ map id canonical (`open`/`in-progress`/`blocked`/`done`) + vài alias, mọi giá trị khác thành
@@ -773,15 +786,23 @@ bao giờ đăng ký được lệnh của nó), nên tính năng được viế
 - **Một lệnh dùng chung, template lấy từ vault**: mục command palette **"New note from template"** + nút
   ribbon (`file-plus`), cả hai mở cùng một modal. Dùng chung cho meeting / task / procedure / abnormality
   / document / query / weekly-review — không phải nút riêng cho meeting.
-- **Thư mục template tự dò**: thư mục **nông nhất** có tên `templates` (không phân biệt hoa thường) —
-  trong vault này là `Wiki/templates`. Không thêm setting, không thêm key cấu hình (Obsidian core
-  Templates cũng chỉ dùng một thư mục). Modal liệt kê mọi file `.md` trong đó (có ô lọc), ô **Title**, và
-  ô **Folder** sẽ chứa note mới.
+- **Thư mục template tự dò — toàn vault, không phải thư mục đầu tiên (sửa 2026-11-05, issue #64)**: trước
+  đây chỉ lấy thư mục **nông nhất** tên `templates` (không phân biệt hoa thường), và vault thật có **hai** —
+  `office-104/templates` (chỉ `docx/html/pdf`, không có `.md`) và `relats/templates` (10 template markdown) —
+  nên `office-104` thắng theo thứ tự tên của `listTree` và modal liệt kê **trống**. Nay `findTemplatesFolders()`
+  trả **mọi** thư mục tên `templates` (nông nhất trước rồi theo alphabet) và `listTemplates()` lấy **hợp
+  nhất** mọi file `.md` trong đó, khử trùng theo path, sắp theo title (trùng title thì theo path); hàng vẫn
+  hiện đường dẫn nên hai thư cùng basename phân biệt được. Không thêm setting, không thêm key cấu hình.
+  Modal phân biệt ba trạng thái: thiếu thư mục `templates` (`templates-missing`); có thư mục nhưng **không
+  có file markdown nào** (`templates-empty` — nêu rõ thư mục đã kiểm tra, không rơi vào "No matching
+  template"); và có template nhưng ô lọc không khớp. Ô **Title** và ô **Folder** giữ nguyên như cũ.
 - **Thư mục đích suy ra từ template, và luôn hiện trước khi ghi**: xét các tên là *anh em* của thư mục
   template (`Wiki/templates/meeting.md` → xét trong `Wiki/`): `meeting` → `meetings`; tên giữ nguyên
   (`daily` → `daily`); `y` → `ies` (`query` → `queries`, `abnormality` → `abnormalities`); `+es` sau âm
   sibilation; và **đoạn cuối sau dấu gạch** (`weekly-review` → `reviews`). Không khớp (ví dụ
-  `shift-handover`) thì ô Folder để trống cho người dùng gõ. Ô này **luôn sửa được và luôn hiển thị**,
+  `shift-handover`) thì ô Folder để trống cho người dùng gõ. Suy ra **theo từng template** — lấy cha của chính đường dẫn
+  template đó, không phải "thư mục template chung" — nên một template nằm trong `office-104/templates`
+  không bao giờ nhắm note vào `relats/*` (issue #64). Ô này **luôn sửa được và luôn hiển thị**,
   nên note rơi đúng chỗ mà modal nói. **Thư mục thiếu KHÔNG tự tạo**: gõ sai một chữ sẽ rải note vào
   thư mục rác, còn báo "Folder not found" trung thực chỉ tốn một lần sửa.
 - **Tên file & placeholder**: `<YYYY-MM-DD>-<slug>.md`; trùng tên → `-2`, `-3` … và **không bao giờ ghi

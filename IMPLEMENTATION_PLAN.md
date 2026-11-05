@@ -4,7 +4,7 @@
 > Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong.
 > Cập nhật file này **mỗi khi** một mục thay đổi trạng thái.
 
-Cập nhật lần cuối: 2026-09-30 (Phase 45 — danh sách giá trị cho thuộc tính đóng: nút ▾ cạnh `status`/`priority`/… — FR-23, issue #61)
+Cập nhật lần cuối: 2026-11-05 (Phase 46 — template picker liệt kê mọi thư mục `templates` thay vì thư mục đầu tiên: FR-17, issue #64)
 
 ---
 
@@ -789,7 +789,47 @@ Cập nhật lần cuối: 2026-09-30 (Phase 45 — danh sách giá trị cho th
       system` (ADR, `status: accepted`) **không** hiện picker và giữ nguyên text; console/pageerror rỗng.
       `bash deploy/smoke.sh` trên instance tạm: **17 PASS, 0 FAIL**.
 
+## Phase 46 — Template picker liệt kê mọi thư mục `templates` (sửa nhầm thư mục đầu tiên) — FR-17 (issue #64)
+- [x] M46.1 `web/src/lib/templates.ts`: bỏ `findTemplatesFolder()` (trả về **một** thư mục — thư mục đầu
+      tiên theo bề rộng) → `findTemplatesFolders(root): string[]`: **mọi** thư mục tên `templates`, không
+      phân biệt hoa thường, **nông nhất trước rồi theo alphabet**; `listTemplates(root, folders)` nhận
+      **mảng** thư mục và trả **hợp nhất** mọi file `.md`, khử trùng theo path, sắp theo title (trùng title
+      thì theo path). Không đụng server/API — cây đã chứa mọi thư mục.
+- [x] M46.2 `web/src/components/TemplatePicker.tsx`: dùng danh sách hợp nhất và phân biệt **ba** trạng
+      thái — `templates-missing` (vault không có thư mục `templates` nào), `templates-empty` (**có** thư
+      mục nhưng **không có file markdown nào**: nêu rõ `office-104/templates` đã được kiểm tra, không rơi
+      vào "No matching template"), và danh sách có hàng (ô lọc chỉ hiện "No matching template" khi thực
+      sự có template). `resolveTargetFolder()` giữ nguyên — vẫn lấy **cha của chính template** nên
+      `office-104/templates/*.md` không bao giờ nhắm vào `relats/*`.
+- [x] M46.3 Test `web/tests/templates.test.ts` (7 case mới/đổi): vault có **cả** `office-104/templates`
+      (không có `.md`) lẫn `relats/templates` liệt kê đủ **10** template; hai thư mục có `.md` → hợp nhất
+      không trùng (cùng folder nhập hai lần vẫn một hàng); không có thư mục `templates` → `[]` (file
+      `templates.md` không phải thư mục); basename trùng vẫn phân biệt được bằng path;
+      `resolveTargetFolder('office-104/templates/*.md')` không bao giờ trả gì trong `relats/`.
+      `npm test` server **168 PASS**, web **164 PASS**; `npm run typecheck` 4 workspace sạch.
+- [x] M46.4 Kiểm chứng reproduce-then-fix trên **bản sao** vault thật (65 MB, sao từ LXC 107 — không
+      đụng vault production, không qua container đang chạy): **trước sửa** — 0 hàng và "No matching
+      template" cho cả trạng thái ban đầu lẫn `meet`/`weekly`; **sau sửa** — 10 hàng, `meet` → chọn được
+      `relats/templates/meeting.md` (với title: `Creates relats/meetings/2026-11-05-probe.md`), `weekly` →
+      chọn được `relats/templates/weekly-review.md` (`Creates relats/reviews/2026-11-05-probe.md`); vault
+      chỉ có `office-104/templates` → `templates-empty` đúng thông báo; vault không có thư mục `templates`
+      → `templates-missing`. (Hai lỗi `500` trong console là `GET /api/git/status` — bản sao có `.git` dùng
+      `git-lfs` mà host không cài; không liên quan template.)
+
 ### Nhật ký tiến độ
+- 2026-11-05 (Phase 46 — template picker liệt kê mọi thư mục `templates`, FR-17, issue #64): người dùng
+  báo "the template picker lists nothing" trên production. Truy vết: `findTemplatesFolder()` chỉ trả
+  thư mục **đầu tiên** tên `templates` (duyệt theo bề rộng), trong khi vault thật có **hai** —
+  `office-104/templates` (chỉ docx/html/pdf, không có `.md`) đứng trước `relats/templates` (10 template
+  markdown) vì `listTree` sắp thư mục theo tên ⇒ picker nhận thư mục rỗng, lọc `.md` → `[]` và mọi truy
+  vấn trả "No matching template" — **lỗi tra cứu, không phải lỗi ô lọc**. Sửa: `findTemplatesFolders()`
+  trả **mọi** thư mục + `listTemplates()` hợp nhất `.md` (khử trùng theo path, sắp theo title); modal ba
+  trạng thái (`templates-missing` / `templates-empty` / danh sách); `resolveTargetFolder()` vẫn theo cha
+  của từng template. Verify: `npm test` server **168** / web **164** PASS, typecheck 4 workspace; Chromium
+  headless trên **bản sao** vault thật — trước sửa 0 hàng + "No matching template", sau sửa 10 hàng và
+  `meet`/`weekly` chọn đúng `relats/templates/meeting.md` / `weekly-review.md` (tạo ra
+  `relats/meetings/…`, `relats/reviews/…`); vault chỉ có `office-104/templates` → `templates-empty`, vault
+  không có thư mục `templates` → `templates-missing`.
 - 2026-09-30 (Phase 45 — danh sách giá trị cho thuộc tính đóng, FR-23, issue #61): người dùng nói "the
   task will be selection list, to easy select status". Trên trang task, `status:` là text tự do nên đổi
   trạng thái phải gõ đúng id — mà gõ sai thì **không vô hại**: board chỉ map id canonical + vài alias,
