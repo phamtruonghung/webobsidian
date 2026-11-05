@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { findNode } from '../lib/tree';
 import {
@@ -81,7 +81,13 @@ function Picker() {
               : `${templatesFolders.length} templates folders exist`}{' '}
             in this vault but none contains a markdown (.md) file — nothing to pick.
             <div className="tpl-path">
-              Checked: <code>{templatesFolders.join('</code>, <code>')}</code>
+              Checked:{' '}
+              {templatesFolders.map((f, i) => (
+                <Fragment key={f}>
+                  {i > 0 && ', '}
+                  <code>{f}</code>
+                </Fragment>
+              ))}
             </div>
           </div>
         </div>
